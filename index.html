@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kottravai offers premium handcrafted terracotta jewellery, heritage mixes, coconut crafts and essential care products. Shop our exclusive handmade collection today." />
+  <meta http-equiv="Permissions-Policy"
+    content="accelerometer=*, gyroscope=*, magnetometer=*, payment=*, geolocation=*, camera=*, microphone=*">
+
+  <title>Kottravai | Revival of Heritage</title>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  
+  <style>
+    /* Ensure the One Tap prompt is always visible */
+    #google-signin-button { min-height: 44px; margin-top: 1rem; }
+  </style>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <link rel="shortcut icon" href="/favicon.png" />
+
+  <!-- ✅ CRITICAL: Adaptive Preload LCP hero image (Matches first slide in HeroSlider) -->
+  <link rel="preload" as="image" href="/hero.webp" fetchpriority="high" />
+
+  <!-- Preconnect to essential origins -->
+  <link rel="preconnect" href="https://itqdnbwbbhyaapquxlqs.supabase.co">
+  <link rel="dns-prefetch" href="https://itqdnbwbbhyaapquxlqs.supabase.co">
+  <link rel="preconnect" href="https://checkout.razorpay.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- ✅ Fonts: subset weights only (400+600+700+800 instead of all 9) -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Montserrat:wght@400;600;700;800&family=Outfit:wght@400;600;700&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div id="root"></div>
+  
+  <!-- Core JavaScript -->
+  <script type="module" src="/src/main.tsx"></script>
+
+  <!-- ✅ THIRD PARTY SCRIPTS: Moved to bottom of body to prevent render blocking (TBT/FCP fix) -->
+
+  <!-- Razorpay (deferred — non-blocking) -->
+  <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <!-- ✅ Dynamic Defer Third Party Analytics Scripts (Eliminates Total Blocking Time - TBT) -->
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        // 1. Google Analytics
+        var gaScript = document.createElement('script');
+        gaScript.async = true;
+        gaScript.src = "https://www.googletagmanager.com/gtag/js?id=G-LHMHGXGY6K";
+        document.body.appendChild(gaScript);
+        
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', 'G-LHMHGXGY6K');
+
+        // 2. Meta Pixel Code
+        !function(f,b,e,v,n,t,s)
+        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        n.queue=[];t=b.createElement(e);t.async=!0;
+        t.src=v;s=b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t,s)}(window, document,'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '4295609027368101');
+        fbq('track', 'PageView');
+      }, 2500);
+    });
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=4295609027368101&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
+
+</body>
+
+</html>

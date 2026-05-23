@@ -1,0 +1,109 @@
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const OpenAI = require("openai");
+
+class AIProviderService {
+    constructor() {
+        console.log("🛠️ [RCA] INITIALIZING_AI_PROVIDERS...");
+        this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        this.openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+        this.primaryProvider = 'gemini';
+        
+        console.log("🛠️ [RCA] PROVIDER_STATUS:", {
+            GEMINI: !!process.env.GEMINI_API_KEY,
+            OPENAI: !!process.env.OPENAI_API_KEY
+        });
+    }
+
+    async generateContent(systemPrompt, userMessage, history = [], options = {}) {
+        const provider = options.provider || this.primaryProvider;
+        console.log(`📡 [RCA] PROVIDER_CALL_START: ${provider}`);
+        
+        try {
+            if (provider === 'gemini') {
+                return await this._callGemini(systemPrompt, userMessage, history);
+            } else if (provider === 'openai' && this.openai) {
+                return await this._callOpenAI(systemPrompt, userMessage, history);
+            }
+            throw new Error(`Provider ${provider} not available`);
+        } catch (err) {
+            console.error(`❌ [RCA] PROVIDER_ERROR (${provider}):`, err.message);
+            
+            /* OpenAI Fallback Disabled for Stabilization
+            if (provider === 'gemini' && this.openai) {
+                console.warn("🔄 [RCA] INITIATING_FAILOVER_TO_OPENAI...");
+                return await this._callOpenAI(systemPrompt, userMessage, history);
+            }
+            */
+            throw err;
+        }
+    }
+
+    async _callGemini(systemPrompt, userMessage, history) {
+        console.log("📡 [RCA] GEMINI_API_REQUEST_SENT");
+        const model = this.gemini.getGenerativeModel({ 
+            model: "gemini-2.0-flash",
+            systemInstruction: systemPrompt
+        });
+        
+        // 1. Normalize Roles (Phase 11)
+        let normalizedHistory = history
+            .filter(h => h.role && h.content)
+            .map(h => ({
+                role: (h.role === 'assistant' || h.role === 'bot' || h.role === 'model') ? 'model' : 'user',
+                parts: [{ text: h.content }]
+            }));
+
+        console.log("📜 GEMINI_HISTORY_RAW:", normalizedHistory.map(h => h.role));
+
+        // 2. Enforce Valid First Message: Must be 'user'
+        while (normalizedHistory.length > 0 && normalizedHistory[0].role !== 'user') {
+            console.warn("⚠️ [RCA] STRIPPING_LEADING_MODEL_MESSAGE");
+            normalizedHistory.shift();
+        }
+
+        // 3. Safety: If empty after cleanup, don't crash
+        if (normalizedHistory.length === 0) {
+            console.log("ℹ️ [RCA] HISTORY_EMPTY_OR_INVALID_START_CLEANED");
+        }
+
+        console.log("✅ GEMINI_HISTORY_VALID:", normalizedHistory.map(h => h.role));
+
+        const chat = model.startChat({
+            history: normalizedHistory
+        });
+        
+        const result = await chat.sendMessage(userMessage);
+        console.log("✅ [RCA] GEMINI_API_SUCCESS");
+        return { text: result.response.text(), provider: 'gemini' };
+    }
+
+    async _callOpenAI(systemPrompt, userMessage, history) {
+        console.log("📡 [RCA] OPENAI_API_REQUEST_SENT");
+        const response = await this.openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+                { role: "system", content: systemPrompt },
+                ...history.map(h => ({ role: h.role, content: h.content })),
+                { role: "user", content: userMessage }
+            ],
+            max_tokens: 1000
+        });
+        console.log("✅ [RCA] OPENAI_API_SUCCESS");
+        return { text: response.choices[0].message.content, provider: 'openai' };
+    }
+
+    async getEmbedding(text) {
+        console.log("📡 [RCA] EMBEDDING_API_REQUEST_SENT");
+        try {
+            const model = this.gemini.getGenerativeModel({ model: "gemini-embedding-001" });
+            const result = await model.embedContent(text);
+            console.log("✅ [RCA] EMBEDDING_API_SUCCESS");
+            return result.embedding.values;
+        } catch (err) {
+            console.error("❌ [RCA] EMBEDDING_API_FAILURE:", err.message);
+            throw err;
+        }
+    }
+}
+
+module.exports = new AIProviderService();
