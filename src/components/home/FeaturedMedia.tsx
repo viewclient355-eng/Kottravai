@@ -21,6 +21,8 @@ const FeaturedMedia = () => {
                             <img 
                                 src="/featured-vijay-tv.jpg" 
                                 alt="Kottravai featured on Startup Singam - Vijay TV" 
+                                width={996}
+                                height={494}
                                 className="w-full h-auto object-cover transition-transform duration-1000 group-hover:scale-105"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none opacity-60 transition-opacity"></div>

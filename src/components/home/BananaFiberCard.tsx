@@ -27,6 +27,8 @@ const BananaFiberCard: React.FC<{ product: Product }> = ({ product }) => {
                     <img 
                         src={product.image} 
                         alt={product.name}
+                        width={300}
+                        height={300}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                 </Link>

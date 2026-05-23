@@ -37,6 +37,8 @@ const NewArrivalProductCard: React.FC<NewArrivalProductCardProps> = ({ product }
                     <img
                         src={product.image}
                         alt={product.name}
+                        width={300}
+                        height={300}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         loading="lazy"
                     />

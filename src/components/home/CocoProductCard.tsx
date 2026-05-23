@@ -19,6 +19,8 @@ const CocoProductCard: React.FC<{ product: Product }> = ({ product }) => {
                     <img 
                         src={product.image} 
                         alt={product.name}
+                        width={300}
+                        height={300}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
                 </Link>

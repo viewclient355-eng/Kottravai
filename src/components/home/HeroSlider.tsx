@@ -55,9 +55,9 @@ const HeroSlider = () => {
 
     return (
         <section 
-            className="relative w-full overflow-hidden bg-white group hero-section-container aspect-[1920/1044]"
+            className="relative w-full overflow-hidden bg-white group hero-section-container"
         >
-            <div className="w-full relative aspect-[1920/1044]">
+            <div className="w-full relative h-0" style={{ paddingBottom: '54.375%' }}>
                 {slides.map((slide, index) => (
                     <div
                         key={index}
