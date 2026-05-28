@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Filter, ShoppingBag, Heart, Search, ChevronDown, X } from 'lucide-react';
@@ -351,8 +351,8 @@ const Shop = () => {
                                                             { value: 'name-desc', label: 'Alphabetical: Z-A' },
                                                             { value: 'best-selling', label: 'Best Selling' },
                                                             { value: 'rating', label: 'Rating' },
-                                                            { value: 'price-low', label: 'Price: Low → High' },
-                                                            { value: 'price-high', label: 'Price: High → Low' }
+                                                            { value: 'price-low', label: 'Price: Low ΓåÆ High' },
+                                                            { value: 'price-high', label: 'Price: High ΓåÆ Low' }
                                                         ].map((option) => (
                                                             <button
                                                                 key={option.value}
@@ -397,8 +397,8 @@ const Shop = () => {
                                                     { value: 'name-desc', label: 'Alphabetical: Z-A' },
                                                     { value: 'best-selling', label: 'Best Selling' },
                                                     { value: 'rating', label: 'Rating' },
-                                                    { value: 'price-low', label: 'Price: Low → High' },
-                                                    { value: 'price-high', label: 'Price: High → Low' }
+                                                    { value: 'price-low', label: 'Price: Low ΓåÆ High' },
+                                                    { value: 'price-high', label: 'Price: High ΓåÆ Low' }
                                                 ].map((option) => (
                                                     <button
                                                         key={option.value}
@@ -472,14 +472,14 @@ const Shop = () => {
                                                 {/* Content Area */}
                                                 <div className="p-3 flex-1 flex flex-col">
 
-                                                    {/* Price — Top */}
+                                                    {/* Price ΓÇö Top */}
                                                     <div className="mb-2">
                                                         {product.isCustomRequest ? (
                                                             <span className="text-sm font-bold text-[#8E2A8B]">Price on Request</span>
                                                         ) : (product.variants && product.variants.length > 0) || Number(product.price) === 0 ? (
                                                             <span className="text-sm font-bold text-[#b5128f]">View Options</span>
                                                         ) : (
-                                                            <span className="text-lg font-black text-[#2D1B4E]">₹{Number(product.price).toLocaleString('en-IN')}</span>
+                                                            <span className="text-lg font-black text-[#2D1B4E]">Γé╣{Number(product.price).toLocaleString('en-IN')}</span>
                                                         )}
                                                     </div>
 
@@ -505,7 +505,7 @@ const Shop = () => {
                                                     {/* Bottom Action Row */}
                                                     <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
 
-                                                        {/* Buy Now — left, full flex */}
+                                                        {/* Buy Now ΓÇö left, full flex */}
                                                         {product.category === 'Essential Care' ? (
                                                             <button
                                                                 onClick={(e) => {
@@ -544,7 +544,7 @@ const Shop = () => {
                                                             </Link>
                                                         )}
 
-                                                        {/* Cart icon-only — right */}
+                                                        {/* Cart icon-only ΓÇö right */}
                                                         {!product.isCustomRequest && product.category !== 'Essential Care' && (
                                                             isInCart ? (
                                                                 <button

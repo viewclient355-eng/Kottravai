@@ -109,15 +109,21 @@ const Home = () => {
                             rel="noopener noreferrer"
                             className="block hover:opacity-95 transition-opacity"
                         >
-                            <img
-                                src="/whatsapp-banner.webp"
-                                alt="Join Kottravai WhatsApp Community"
-                                width={1240}
-                                height={300}
-                                className="w-full h-auto object-cover shadow-sm animate-pulse-slow"
-                                loading="lazy"
-                                decoding="async"
-                            />
+                            <picture>
+                                <source
+                                    media="(max-width: 768px)"
+                                    srcSet="/IMG-20260523-WA0004.jpg.jpeg"
+                                />
+                                <img
+                                    src="/whatsapp-banner.webp"
+                                    alt="Join Kottravai WhatsApp Community"
+                                    width={1240}
+                                    height={300}
+                                    className="w-full h-auto object-cover shadow-sm animate-pulse-slow"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </picture>
                         </a>
                     </div>
                 </div>

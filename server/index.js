@@ -927,22 +927,23 @@ app.get('/api/location/pincode/:pincode', async (req, res) => {
     }
 });
 
-// --- Advanced Analytics Tracking Endpoint ---
-app.post('/api/track', async (req, res) => {
-    try {
-        const {
-            event_name, user_id, session_id, visitor_id, visit_count,
-            page_url, device_type, browser_type, referrer, metadata, is_repeat
-        } = req.body;
-        // Database tracking disabled to save Supabase free tier limits.
-        // The frontend already routes analytics directly to Google Sheets via AnalyticsService.
-        res.status(200).json({ status: 'tracked', db_skipped: true });
-    } catch (err) {
-        // Fail silently to avoid interrupting user experience
-        console.error('Analytics tracking error:', err.message);
-        res.status(200).json({ status: 'failed_silently' });
-    }
-});
+// Analytics tracking: prefer to mount the tracking router if available, otherwise provide a safe fallback
+try {
+    const trackingRoutes = require('./routes/trackingRoutes');
+    app.use('/api/track', trackingRoutes);
+} catch (e) {
+    console.warn('⚠️ trackingRoutes not loaded:', e.message);
+    // Fallback: accept posts to /api/track to avoid breaking clients; mimic previous lightweight behaviour
+    app.post('/api/track', async (req, res) => {
+        try {
+            // Keep lightweight acknowledgement to avoid blocking user flows
+            return res.status(200).json({ status: 'tracked', db_skipped: true });
+        } catch (err) {
+            console.error('Analytics tracking error (fallback):', err.message);
+            return res.status(200).json({ status: 'failed_silently' });
+        }
+    });
+}
 
 // Setup DB Route (Secured - Only dev or with master secret)
 app.get('/api/init-db', async (req, res) => {
