@@ -255,7 +255,7 @@ const Checkout = () => {
                 name: "Kottravai",
                 description: "Transaction for Order #" + activeOrder.id,
                 order_id: activeOrder.id,
-                handler: async function (response: any) {
+                handler: async (response: any) => {
                     setIsSubmitting(true);
                     console.log("Payment completed by user", response);
 
