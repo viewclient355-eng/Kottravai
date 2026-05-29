@@ -183,8 +183,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const removeFromCart = (productId: string, variantWeight?: string) => {
+        const removedItem = cart.find(item => item.id === productId && item.selectedVariant?.weight === variantWeight) || cart.find(item => item.id === productId);
         setCartItems(prev => prev.filter(item => !(item.id === productId && item.variantWeight === variantWeight)));
-        analytics.trackEvent('remove_from_cart', { product_id: productId, variant_weight: variantWeight });
+        analytics.trackEvent('remove_from_cart', {
+            product_id: productId,
+            product_name: removedItem?.name || productId,
+            quantity: removedItem?.quantity,
+            price: removedItem?.price,
+            variant_weight: variantWeight
+        });
     };
 
     const updateQuantity = (productId: string, quantity: number, variantWeight?: string) => {

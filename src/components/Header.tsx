@@ -101,11 +101,11 @@ const Header = () => {
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (searchQuery.trim()) {
-            analytics.trackEvent('site_search', {
+            analytics.trackEvent('search', {
                 search_term: searchQuery.trim(),
                 result_count: liveResults.length,
                 is_live_search: false
-            }, 'SearchAnalytics');
+            });
             
             navigate(`/shop?q=${encodeURIComponent(searchQuery.trim())}`);
             setIsSearchOpen(false);

@@ -96,12 +96,12 @@ const Checkout = () => {
     // Track Checkout Started
     useEffect(() => {
         if (cart.length > 0) {
-            // analytics.trackEvent('checkout_started', {
-            //     cart_items: cart.length,
-            //     total_amount: finalTotal
-            // });
+            analytics.trackEvent('checkout_started', {
+                cart_items: cart.length,
+                total_amount: finalTotal
+            });
         }
-    }, []);
+    }, [cart.length, finalTotal]);
 
     // Track Address Filled (triggers when key fields are populated)
     useEffect(() => {
@@ -311,12 +311,16 @@ const Checkout = () => {
 
                         if (verifyResult.status === "success") {
                             console.log("✅ ORDER SUCCESS: Payment verified");
-                            
-                            // 3. Clear cart and redirect
-                            clearCart();
-                            localStorage.removeItem('kottravai_affiliate_ref');
+                            const orderTrackingKey = `kottravai_purchase_completed_${activeOrder.id}`;
+                            analytics.trackEvent('purchase_completed', {
+                                order_id: activeOrder.id,
+                                payment_id: response.razorpay_payment_id,
+                                payment_method: formData.paymentMethod,
+                                order_total: finalTotal,
+                                item_count: cart.length,
+                                total_amount: finalTotal
                             localStorage.removeItem('kottravai_affiliate_ref_time');
-                            navigate('/order-success');
+                            navigate('/order-success', { state: { orderData } });
                         } else {
                             console.error("❌ Payment verification failed on server", verifyResult);
                             toast.error("Payment verification failed: " + (verifyResult.message || "Unknown error"));
@@ -326,7 +330,7 @@ const Checkout = () => {
                         // We still redirect to success because the webhook is highly likely to have succeeded
                         // and we don't want to show an error to a user who just paid successfully.
                         clearCart();
-                        navigate('/order-success');
+                        navigate('/order-success', { state: { orderData } });
                     }
                     setIsSubmitting(false);
                 },

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
+import analytics from '@/utils/analyticsService';
 import MainLayout from '@/layouts/MainLayout';
 
 const sanitizeUrl = (url: string) => {
@@ -21,7 +22,21 @@ const OrderSuccess = () => {
 
     useEffect(() => {
         window.scrollTo(0, 0);
-    }, []);
+        if (orderDetails) {
+            const trackingKey = `kottravai_purchase_completed_${orderDetails.orderId || orderDetails.paymentId || 'unknown'}`;
+            if (!window.sessionStorage.getItem(trackingKey)) {
+                analytics.trackEvent('purchase_completed', {
+                    order_id: orderDetails.orderId || orderDetails.paymentId || 'unknown',
+                    payment_id: orderDetails.paymentId || undefined,
+                    payment_method: orderDetails.paymentMethod || 'online',
+                    order_total: orderDetails.total,
+                    item_count: orderDetails.items?.length || 0,
+                    total_amount: orderDetails.total
+                });
+                window.sessionStorage.setItem(trackingKey, '1');
+            }
+        }
+    }, [orderDetails]);
 
     return (
         <MainLayout>

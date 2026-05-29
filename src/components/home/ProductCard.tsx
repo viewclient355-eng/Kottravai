@@ -47,12 +47,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, badge }) => {
         } else {
             addToCart(product, 1, selectedVariant || undefined);
             toast.success(`${displayName} added to cart!`);
-            analytics.trackEvent('add_to_cart', {
-                product_id: product.id,
-                product_name: displayName,
-                price: selectedVariant?.price || product.price,
-                variant: selectedVariant?.weight || 'default'
-            });
         }
     };
 
@@ -67,7 +61,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, badge }) => {
 
             {/* IMAGE SECTION - FULL BLEED */}
             <div className="relative aspect-[4/3] w-full overflow-hidden rounded-t-[8px] bg-white">
-                <Link to={`/product/${product.slug}`} className="block w-full h-full relative">
+                <Link
+                    to={`/product/${product.slug}`}
+                    className="block w-full h-full relative"
+                    onClick={() => analytics.trackEvent('product_view', {
+                        product_id: product.id,
+                        product_name: displayName,
+                        category: product.category,
+                        price: selectedVariant?.price || product.price,
+                        page: `/product/${product.slug}`
+                    })}
+                >
                     <img
                         src={getOptimizedImage(product.image, IMAGE_SIZES.CARD)}
                         alt={displayName}
@@ -114,7 +118,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, badge }) => {
             {/* PRODUCT INFO SECTION */}
             <div className="p-3 pb-0 flex flex-col flex-grow">
                 <div className="flex justify-between items-start gap-2 mb-1">
-                    <Link to={`/product/${product.slug}`} className="flex-1">
+                    <Link
+                        to={`/product/${product.slug}`}
+                        className="flex-1"
+                        onClick={() => analytics.trackEvent('product_view', {
+                            product_id: product.id,
+                            product_name: displayName,
+                            category: product.category,
+                            price: selectedVariant?.price || product.price,
+                            page: `/product/${product.slug}`
+                        })}
+                    >
                         <h3 className="text-[14px] font-bold font-comfortaa text-brandPurple leading-tight line-clamp-1 hover:opacity-80 transition-opacity">
                             {displayName}
                         </h3>
