@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import toast from 'react-hot-toast';
+import analytics from '@/utils/analyticsService';
 import { ChevronLeft, ChevronRight, Heart, Eye, ShoppingBag } from 'lucide-react';
 
 const BestSellerProductCard = ({ product }: { product: any }) => {
@@ -28,7 +29,17 @@ const BestSellerProductCard = ({ product }: { product: any }) => {
             
             {/* Image Area */}
             <div className="relative aspect-square w-full overflow-hidden">
-                <Link to={`/product/${product.slug}`} className="block w-full h-full">
+                <Link
+                    to={`/product/${product.slug}`}
+                    className="block w-full h-full"
+                    onClick={() => analytics.trackEvent('product_view', {
+                        product_id: product.id,
+                        product_name: product.name,
+                        category: product.category,
+                        price: product.price,
+                        page: `/product/${product.slug}`
+                    })}
+                >
                     <img
                         src={product.image}
                         alt={product.name}
@@ -55,7 +66,16 @@ const BestSellerProductCard = ({ product }: { product: any }) => {
             {/* Content Area */}
             <div className="p-5 flex flex-col flex-grow">
                 {/* Title */}
-                <Link to={`/product/${product.slug}`}>
+                <Link
+                    to={`/product/${product.slug}`}
+                    onClick={() => analytics.trackEvent('product_view', {
+                        product_id: product.id,
+                        product_name: product.name,
+                        category: product.category,
+                        price: product.price,
+                        page: `/product/${product.slug}`
+                    })}
+                >
                     <h3 className="font-bold text-[#1A1A1A] text-sm leading-tight mb-4 line-clamp-2 min-h-[2.5rem]">
                         {product.name}
                     </h3>
@@ -87,7 +107,16 @@ const BestSellerProductCard = ({ product }: { product: any }) => {
                 {/* Secondary Action Buttons */}
                 <div className="flex gap-2 mb-3 mt-auto">
                     <button 
-                        onClick={() => navigate(`/product/${product.slug}`)}
+                        onClick={() => {
+                            analytics.trackEvent('product_view', {
+                                product_id: product.id,
+                                product_name: product.name,
+                                category: product.category,
+                                price: product.price,
+                                page: `/product/${product.slug}`
+                            });
+                            navigate(`/product/${product.slug}`);
+                        }}
                         className="flex-1 border border-gray-200 rounded-lg py-2.5 flex items-center justify-center gap-2 text-[10px] font-bold text-gray-600 uppercase tracking-widest hover:bg-gray-50 transition-colors"
                     >
                         <Eye size={16} /> QUICK VIEW

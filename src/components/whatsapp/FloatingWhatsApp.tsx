@@ -1,8 +1,10 @@
 import React from 'react';
+import analytics from '@/utils/analyticsService';
 
 const FloatingWhatsApp: React.FC = () => {
     const handleClick = (e: React.MouseEvent) => {
         e.preventDefault();
+        analytics.trackEvent('whatsapp_click', { location: 'floating_action_button' });
         const message = "Hello! I'm interested in your products.";
         const encoded = encodeURIComponent(message);
         window.open(`https://api.whatsapp.com/send?phone=918807829183&text=${encoded}`, "_blank");

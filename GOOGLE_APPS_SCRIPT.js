@@ -172,7 +172,21 @@ function doPost(e) {
             return jsonResponse('error', 'Invalid JSON: ' + jsonErr.message);
         }
 
-        // Validate required fields
+        // Lightweight Analytics payload support:
+        // If payload uses eventType / page / sessionId etc., handle separately
+        if (data && (data.eventType || data.event_type || data.page || data.sessionId)) {
+            try {
+                var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+                ensureAnalyticsSheet(ss);
+                appendAnalyticsRow(ss, data);
+                return jsonResponse('success', 'Analytics event captured in Analytics sheet.');
+            } catch (innerErr) {
+                Logger.log('doPost (analytics) ERROR: ' + innerErr.toString());
+                return jsonResponse('error', 'Analytics write failed: ' + innerErr.toString());
+            }
+        }
+
+        // Validate required fields for V2 ingestion
         var required = ['visitor_id', 'session_id', 'event_name', 'page_url'];
         var missing = [];
         for (var r = 0; r < required.length; r++) {
@@ -790,4 +804,132 @@ function debugV2() {
     if (legacy) {
         Logger.log('DEBUG: legacy MASTER_EVENT_LOG rows = ' + legacy.getLastRow());
     }
+}
+
+
+// ================================================================
+//  LIGHTWEIGHT ANALYTICS SHEET (for simple tracking events)
+// ================================================================
+
+function ensureAnalyticsSheet(ss) {
+    var name = 'Analytics';
+    var sheet = ss.getSheetByName(name);
+    var headers = [
+        'Timestamp', 'Event Type', 'Page', 'Referrer', 'Browser', 'Device',
+        'Screen Size', 'User Agent', 'Session ID', 'UTM Source', 'UTM Medium', 'UTM Campaign'
+    ];
+
+    if (!sheet) {
+        sheet = ss.insertSheet(name);
+        sheet.getRange(1, 1, 1, headers.length)
+            .setValues([headers])
+            .setFontWeight('bold')
+            .setBackground('#1e293b')
+            .setFontColor('#ffffff')
+            .setHorizontalAlignment('center');
+        sheet.setFrozenRows(1);
+        sheet.setColumnWidth(1, 180);
+        Logger.log('ENSURE-ANALYTICS: created Analytics with headers');
+        return sheet;
+    }
+
+    // If it exists, ensure headers exist in row 1 (do not overwrite user data)
+    var lastCol = Math.max(sheet.getLastColumn(), headers.length);
+    var row1 = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var needSet = false;
+    for (var i = 0; i < headers.length; i++) {
+        if (!row1[i] || String(row1[i]).trim() === '') { needSet = true; break; }
+    }
+    if (needSet) {
+        sheet.getRange(1, 1, 1, headers.length)
+            .setValues([headers])
+            .setFontWeight('bold')
+            .setBackground('#1e293b')
+            .setFontColor('#ffffff')
+            .setHorizontalAlignment('center');
+        sheet.setFrozenRows(1);
+        Logger.log('ENSURE-ANALYTICS: headers set/updated in Analytics');
+    } else {
+        Logger.log('ENSURE-ANALYTICS: Analytics sheet exists with headers');
+    }
+    return sheet;
+}
+
+function appendAnalyticsRow(ss, data) {
+    var sheet = ss.getSheetByName('Analytics');
+    if (!sheet) sheet = ensureAnalyticsSheet(ss);
+
+    var timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+    var row = [
+        timestamp,
+        data.eventType || data.event_type || data.event || '',
+        data.page || data.page_url || '',
+        data.referrer || data.referer || '',
+        data.browser || '',
+        data.device || data.deviceType || data.device_type || '',
+        data.screenSize || data.screen_size || '',
+        data.userAgent || data.user_agent || '',
+        data.sessionId || data.session_id || '',
+        data.utm_source || data.utmSource || '',
+        data.utm_medium || data.utmMedium || '',
+        data.utm_campaign || data.utmCampaign || ''
+    ];
+
+    sheet.appendRow(row);
+    Logger.log('APPEND-ANALYTICS: row added to Analytics, lastRow=' + sheet.getLastRow());
+}
+
+function ensureDashboardSheet(ss) {
+    var name = 'Dashboard';
+    var sheet = ss.getSheetByName(name);
+    var labels = [
+        'Total Visitors', 'Page Views', 'Product Views', 'WhatsApp Clicks',
+        'Contact Leads', 'Top Product', 'Top Traffic Source', 'Average Session Duration'
+    ];
+
+    if (!sheet) {
+        sheet = ss.insertSheet(name);
+        for (var i = 0; i < labels.length; i++) {
+            sheet.getRange(i + 1, 1).setValue(labels[i]).setFontWeight('bold');
+        }
+        Logger.log('ENSURE-DASH: created Dashboard with KPI labels');
+    } else {
+        for (var j = 0; j < labels.length; j++) {
+            var cell = sheet.getRange(j + 1, 1);
+            if (!cell.getValue()) cell.setValue(labels[j]).setFontWeight('bold');
+        }
+        Logger.log('ENSURE-DASH: Dashboard ensured/updated');
+    }
+    return sheet;
+}
+
+/**
+ * Temporary test function to simulate a lightweight analytics POST.
+ * Run this from Apps Script editor to validate doPost + Analytics sheet.
+ */
+function testAnalytics() {
+    const payload = {
+        postData: {
+            contents: JSON.stringify({
+                eventType: "page_view",
+                page: "/home",
+                browser: "Chrome",
+                device: "Desktop",
+                sessionId: "TEST123"
+            })
+        }
+    };
+
+    return doPost(payload);
+}
+
+/**
+ * Convenience helper: ensures Analytics + Dashboard sheets exist,
+ * then runs the lightweight testAnalytics POST. Run from editor.
+ */
+function runValidation() {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    ensureAnalyticsSheet(ss);
+    ensureDashboardSheet(ss);
+    return testAnalytics();
 }

@@ -174,6 +174,15 @@ const Shop = () => {
     // Determine current category from slug
     const currentCategory = slug ? categories.find(c => c.slug === slug) : null;
 
+    useEffect(() => {
+        if (slug) {
+            analytics.trackEvent('category_view', {
+                category_slug: slug,
+                category_name: currentCategory?.name || slug
+            });
+        }
+    }, [slug, currentCategory?.name]);
+
     // Use a lazy initializer or effect to set initial expanded state based on slug
     const [expandedCategory, setExpandedCategory] = useState<string | null>(() => {
         if (!slug) return null;

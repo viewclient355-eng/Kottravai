@@ -1,96 +1,60 @@
-/**
- * Kottravai Analytics Service — Ultra Robust v2.0
- * 
- * Sends events to Google Apps Script doPost() which writes to Google Sheets.
- */
+import { getSessionId } from '@/utils/session';
+import { getVisitorId } from '@/utils/visitor';
 
-// Use Environment Variable from .env, fallback to the current hardcoded one if not available
-const GOOGLE_SCRIPT_URL = import.meta.env.VITE_ANALYTICS_URL || 'https://script.google.com/macros/s/AKfycbyP2DTMncQ6C9KcbyCUTRUR09eWD_uuQi28fz3Njrlq5NFN6PADpHXu5ZCB6MMiagHhFQ/exec';
+export type AnalyticsMetadata = Record<string, any>;
 
 export interface AnalyticsPayload {
-    visitor_id: string;
+    event_type: string;
+    page: string;
+    timestamp: string;
     session_id: string;
-    event_name: string;
+    visitor_id: string;
     page_url: string;
-    page_title?: string;
-    ip_address?: string;
-    sheet_name?: string;
+    browser: string;
+    device: string;
+    screen_size: string;
+    referrer?: string;
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+    metadata?: AnalyticsMetadata;
     [key: string]: any;
 }
 
-export async function sendAnalyticsEvent(payload: AnalyticsPayload): Promise<void> {
-    const url = GOOGLE_SCRIPT_URL;
+const TRACKING_API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const TRACKING_ENDPOINT = TRACKING_API_BASE
+    ? `${TRACKING_API_BASE.replace(/\/$/, '')}/api/track/event`
+    : '/api/track/event';
 
-    // Log the attempt so we can verify the URL in the browser (F12 -> Console)
-    console.log(`[Analytics] 🛰️ Sending ${payload.event_name} to:`, url);
-
-    try {
-        await fetch(url, {
-            method: 'POST',
-            mode: 'no-cors', // Required for Google Apps Script Web Apps
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload),
-            keepalive: true
-        });
-        console.log('[Analytics] ✅ Signal sent (Web App will process it in background)');
-    } catch (error) {
-        console.error('[Analytics] ❌ Transport error:', error);
-    }
-}
+const normalizeValue = (value: any): any => {
+    if (value === null || value === undefined || value === '') return undefined;
+    return value;
+};
 
 class AnalyticsService {
     private sessionId: string;
     private visitorId: string;
-    private ipAddress: string = 'Pending';
-    private trafficSourceData = {
-        source: 'direct',
-        utm_source: '',
-        utm_medium: '',
-        utm_campaign: ''
+    private trafficSource: {
+        utm_source: string;
+        utm_medium: string;
+        utm_campaign: string;
     };
 
     constructor() {
-        this.sessionId = this.getOrGenerateSessionId();
-        this.visitorId = this.getOrGenerateVisitorId();
+        this.sessionId = getSessionId();
+        this.visitorId = getVisitorId();
+        this.trafficSource = this.resolveTrafficSource();
 
-        // fetch IP 
-        this.fetchIpAddress();
-
-        // Resolve traffic source
-        this.trafficSourceData = this.resolveTrafficSource();
-
-        console.log('[Analytics] Service Ready. Visitor:', this.visitorId);
+        console.debug('[Analytics] Service Ready. visitor_id=', this.visitorId, 'session_id=', this.sessionId);
     }
 
-    private getOrGenerateVisitorId(): string {
-        let vid = localStorage.getItem('analytics_visitor_id');
-        if (!vid) {
-            vid = 'v_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
-            localStorage.setItem('analytics_visitor_id', vid);
-        }
-        return vid;
-    }
-
-    private getOrGenerateSessionId(): string {
-        let sid = sessionStorage.getItem('analytics_session_id');
-        if (!sid) {
-            sid = 'sid_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
-            sessionStorage.setItem('analytics_session_id', sid);
-        }
-        return sid;
-    }
-
-    private async fetchIpAddress() {
-        try {
-            const resp = await fetch('https://api.ipify.org?format=json');
-            if (!resp.ok) throw new Error('IP Fetch failed');
-            const data = await resp.json();
-            this.ipAddress = data.ip;
-            console.log('[Analytics] IP Resolved:', this.ipAddress);
-        } catch (e) {
-            console.warn('[Analytics] IP Fetch failed, defaulting to Unknown');
-            this.ipAddress = 'Unknown';
-        }
+    private resolveTrafficSource() {
+        const params = new URLSearchParams(window.location.search);
+        return {
+            utm_source: params.get('utm_source') || '',
+            utm_medium: params.get('utm_medium') || '',
+            utm_campaign: params.get('utm_campaign') || ''
+        };
     }
 
     private getDeviceType(): string {
@@ -102,82 +66,109 @@ class AnalyticsService {
 
     private getBrowser(): string {
         const ua = navigator.userAgent;
-        if (ua.indexOf('Firefox') > -1) return 'Firefox';
-        if (ua.indexOf('Chrome') > -1) return 'Chrome';
-        if (ua.indexOf('Safari') > -1) return 'Safari';
-        if (ua.indexOf('Edge') > -1) return 'Edge';
+        if (ua.includes('Firefox')) return 'Firefox';
+        if (ua.includes('Edg')) return 'Edge';
+        if (ua.includes('Chrome')) return 'Chrome';
+        if (ua.includes('Safari')) return 'Safari';
         return 'Other';
     }
 
-    private resolveTrafficSource() {
-        const params = new URLSearchParams(window.location.search);
-        const referrer = document.referrer;
-        let source = 'direct';
-        
-        if (params.get('utm_source')) {
-            source = 'campaign';
-        } else if (referrer) {
-            try {
-                const refUrl = new URL(referrer);
-                if (refUrl.hostname !== window.location.hostname) {
-                    source = 'referral';
-                }
-            } catch (e) {
-                source = 'referral';
-            }
+    private getLandingPage(): string {
+        let landing = sessionStorage.getItem('kottravai_landing_page');
+        if (!landing) {
+            landing = window.location.pathname;
+            sessionStorage.setItem('kottravai_landing_page', landing);
         }
-
-        return {
-            source: source,
-            utm_source: params.get('utm_source') || '',
-            utm_medium: params.get('utm_medium') || '',
-            utm_campaign: params.get('utm_campaign') || ''
-        };
+        return landing;
     }
 
-    public setUserId(uid: string | null) {
-        if (uid) localStorage.setItem('user_id', uid);
-        else localStorage.removeItem('user_id');
-    }
-
-    public trackEvent(eventName: string, metadata: Record<string, any> = {}, sheetName?: string) {
-        const payload: AnalyticsPayload = {
-            visitor_id: this.visitorId,
-            session_id: this.sessionId,
-            event_name: eventName,
-            page_url: window.location.href,
-            page_title: document.title,
-            device_variant: this.getDeviceType(),
-            browser: this.getBrowser(),
-            os: navigator.platform,
-            screen_resolution: `${window.screen.width}x${window.screen.height}`,
-            viewport: `${window.innerWidth}x${window.innerHeight}`,
-            language: navigator.language,
-            time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            traffic_source: this.trafficSourceData.source,
-            utm_source: this.trafficSourceData.utm_source,
-            utm_medium: this.trafficSourceData.utm_medium,
-            utm_campaign: this.trafficSourceData.utm_campaign,
-            ip_address: this.ipAddress,
-            timestamp: new Date().toISOString(),
-            sheet_name: sheetName || "TrafficAnalytics"
-        };
-
-        // Merge metadata directly into payload
-        Object.keys(metadata).forEach(key => {
-            if (payload[key] === undefined) {
-                payload[key] = metadata[key];
+    private updateJourneyTree(page: string): string {
+        let treeStr = sessionStorage.getItem('kottravai_journey_tree') || '[]';
+        try {
+            const tree = JSON.parse(treeStr);
+            if (tree[tree.length - 1] !== page) {
+                tree.push(page);
+                treeStr = JSON.stringify(tree);
+                sessionStorage.setItem('kottravai_journey_tree', treeStr);
             }
-        });
+        } catch (e) {
+            treeStr = JSON.stringify([page]);
+            sessionStorage.setItem('kottravai_journey_tree', treeStr);
+        }
+        return treeStr;
+    }
 
-        sendAnalyticsEvent(payload);
+    private getTrafficSource(): string {
+        if (this.trafficSource.utm_source) return this.trafficSource.utm_source;
+        const ref = document.referrer;
+        if (!ref) return 'Direct';
+        if (ref.includes('google.com')) return 'Google Organic';
+        if (ref.includes('facebook.com') || ref.includes('instagram.com')) return 'Social';
+        return 'Referral';
+    }
+
+    private createPayload(eventType: string, page: string, metadata: AnalyticsMetadata = {}): AnalyticsPayload {
+        const targetPage = page || window.location.pathname;
+        const payload: AnalyticsPayload = {
+            event_type: eventType,
+            page: targetPage,
+            page_title: document.title || targetPage,
+            landing_page: this.getLandingPage(),
+            traffic_source: this.getTrafficSource(),
+            tree: this.updateJourneyTree(targetPage),
+            timestamp: new Date().toISOString(),
+            session_id: this.sessionId,
+            visitor_id: this.visitorId,
+            page_url: window.location.href,
+            browser: this.getBrowser(),
+            device: this.getDeviceType(),
+            screen_size: `${window.screen.width}x${window.screen.height}`,
+            referrer: normalizeValue(document.referrer),
+            utm_source: normalizeValue(this.trafficSource.utm_source),
+            utm_medium: normalizeValue(this.trafficSource.utm_medium),
+            utm_campaign: normalizeValue(this.trafficSource.utm_campaign),
+            metadata: metadata
+        };
+
+        return payload;
+    }
+
+    private async send(payload: AnalyticsPayload) {
+        try {
+            await fetch(TRACKING_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                keepalive: true
+            });
+            console.debug('[Analytics] Sent', payload.event_type, 'to', TRACKING_ENDPOINT);
+        } catch (error) {
+            console.warn('[Analytics] Tracking failed:', error);
+        }
+    }
+
+    public setUserId(userId: string | null) {
+        if (userId) {
+            localStorage.setItem('kottravai_user_id', userId);
+        } else {
+            localStorage.removeItem('kottravai_user_id');
+        }
+    }
+
+    public trackPageView(page: string, metadata: AnalyticsMetadata = {}) {
+        const payload = this.createPayload('page_view', page, metadata);
+        void this.send(payload);
+    }
+
+    public trackEvent(eventType: string, metadata: AnalyticsMetadata = {}, page?: string) {
+        const payload = this.createPayload(eventType, page || metadata.page || window.location.pathname, metadata);
+        void this.send(payload);
     }
 }
 
 export const analytics = new AnalyticsService();
 
 if (typeof window !== 'undefined') {
-    (window as any).sendAnalyticsEvent = sendAnalyticsEvent;
     (window as any).analytics = analytics;
 }
 

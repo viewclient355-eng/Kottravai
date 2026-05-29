@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Helmet } from 'react-helmet-async';
 import MainLayout from '@/layouts/MainLayout';
+import analytics from '@/utils/analyticsService';
 import {
     Mail,
     Phone,
@@ -37,6 +38,11 @@ const Contact = () => {
                 email: formData.email,
                 subject: formData.subject || `Contact from ${formData.name}`,
                 message: `${formData.message}${formData.orderId ? `\n\nOrder ID: ${formData.orderId}` : ''}`
+            });
+            analytics.trackEvent('contact_form_submit', {
+                contact_method: 'form',
+                form_subject: formData.subject || `Contact from ${formData.name}`,
+                order_id: formData.orderId || undefined
             });
             setStatus('success');
             setFormData({ name: '', email: '', subject: '', orderId: '', message: '' });

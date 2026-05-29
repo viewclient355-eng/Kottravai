@@ -57,10 +57,9 @@ function App() {
     // Track Page Views & Affiliate Referral
     useEffect(() => {
         // Core Analytics tracking
-        analytics.trackEvent('page_view', {
-            path: location.pathname,
+        analytics.trackPageView(location.pathname, {
             search: location.search,
-            title: document.title
+            page_title: document.title
         });
 
         // 🎯 Affiliate Tracking: Capture 'ref' parameter and persist in localStorage
