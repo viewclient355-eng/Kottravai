@@ -1,29 +1,4 @@
-const express = require('express');
-const router = express.Router();
 
-// GET /affiliates - list affiliates (placeholder)
-router.get('/', async (req, res) => {
-  try {
-    res.json({ affiliates: [] });
-  } catch (err) {
-    console.error('Affiliates GET error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// POST /affiliates - create affiliate (placeholder)
-router.post('/', async (req, res) => {
-  try {
-    const { name, email } = req.body || {};
-    // TODO: persist affiliate to DB
-    res.status(201).json({ id: null, name, email });
-  } catch (err) {
-    console.error('Affiliates POST error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-module.exports = router;
 const express = require('express');
 const db = require('../db');
 const supabase = require('../supabase');
