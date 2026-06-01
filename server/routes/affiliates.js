@@ -1,4 +1,30 @@
 const express = require('express');
+const router = express.Router();
+
+// GET /affiliates - list affiliates (placeholder)
+router.get('/', async (req, res) => {
+  try {
+    res.json({ affiliates: [] });
+  } catch (err) {
+    console.error('Affiliates GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /affiliates - create affiliate (placeholder)
+router.post('/', async (req, res) => {
+  try {
+    const { name, email } = req.body || {};
+    // TODO: persist affiliate to DB
+    res.status(201).json({ id: null, name, email });
+  } catch (err) {
+    console.error('Affiliates POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
+const express = require('express');
 const db = require('../db');
 const supabase = require('../supabase');
 const crypto = require('crypto');
@@ -440,17 +466,22 @@ module.exports = (authenticateToken, authenticateAdmin) => {
                     console.log(`📧 Sending welcome email to ${application.email}`);
                     const isNewUser = !application.user_id && !userIdWasFoundInSupabase; // We need to track this logic
 
-                    await sendEmail({
-                        to: application.email,
-                        subject: 'Welcome to Kottravai Affiliate Program!',
-                        html: getAffiliateWelcomeTemplate({
-                            name: application.name,
-                            email: application.email,
-                            password: (application.user_id || userIdWasFoundInSupabase) ? 'Use your existing Kottravai password' : tempPassword,
-                            referral_code: referralCode
-                        })
-                    });
-                    console.log(`✅ Welcome email sent to ${application.email}`);
+                    try {
+                        await sendEmail({
+                            to: application.email,
+                            subject: 'Welcome to Kottravai Affiliate Program!',
+                            html: getAffiliateWelcomeTemplate({
+                                name: application.name,
+                                email: application.email,
+                                password: (application.user_id || userIdWasFoundInSupabase) ? 'Use your existing Kottravai password' : tempPassword,
+                                referral_code: referralCode
+                            })
+                        });
+                        console.log(`✅ Welcome email sent to ${application.email}`);
+                    } catch (emailErr) {
+                        console.error(`❌ Welcome email failed for ${application.email}:`, emailErr.message);
+                        // Do not throw! Let the onboarding complete successfully even if email fails.
+                    }
 
                     // Send WhatsApp Approval Notification
                     try {
