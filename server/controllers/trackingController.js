@@ -40,11 +40,13 @@ exports.trackEvent = async (req, res) => {
       visitorId: payload.visitor_id
     });
 
-    googleSheetsService
-      .populateDashboardSheet()
-      .catch(err =>
-        console.error('[DASHBOARD_REFRESH_ERROR]', err)
-      );
+    setImmediate(() => {
+      googleSheetsService
+        .populateDashboardSheet()
+        .catch(err =>
+          console.error('[DASHBOARD_REFRESH_ERROR]', err)
+        );
+    });
     
     res.json({ success: true });
   } catch (err) {
@@ -82,11 +84,13 @@ exports.trackBatch = async (req, res) => {
 
     console.log('[RAW_BATCH_WRITTEN]', { count: rows.length });
 
-    googleSheetsService
-      .populateDashboardSheet()
-      .catch(err =>
-        console.error('[DASHBOARD_REFRESH_ERROR]', err)
-      );
+    setImmediate(() => {
+      googleSheetsService
+        .populateDashboardSheet()
+        .catch(err =>
+          console.error('[DASHBOARD_REFRESH_ERROR]', err)
+        );
+    });
     
     res.json({ success: true, appended: rows.length });
   } catch (err) {

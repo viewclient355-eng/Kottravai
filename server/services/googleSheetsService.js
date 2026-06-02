@@ -793,6 +793,7 @@ function formatCurrency(value) {
 }
 
 async function buildDashboardSheets(s) {
+  console.log('[DASHBOARD_REBUILD_START] Starting dashboard aggregation from Raw Events');
   const formatCurrency = (value) => getSafeNumber(value).toFixed(2);
   const formatPercent = (value) => (getSafeNumber(value) * 100).toFixed(2) + '%';
   const formatMins = (value) => getSafeNumber(value).toFixed(1) + 'm';
@@ -807,6 +808,7 @@ async function buildDashboardSheets(s) {
   const getSheetId = (title) => refreshed.data.sheets.find(sh => sh.properties.title === title)?.properties?.sheetId;
 
   const rows = await fetchRawEventRows(s);
+  console.log(`[RAW_EVENTS_ROWS_FOUND] ${rows.length}`);
   const aggregation = buildAggregations(rows);
   const ts = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' });
 
@@ -919,10 +921,28 @@ async function buildDashboardSheets(s) {
     { sheet: LEAD_ANALYTICS_SHEET, values: leadVals }
   ];
 
-  for (const sheetWrite of sheetWrites) {
-    await clearSheet(s, sheetWrite.sheet);
-    await writeSheetValues(s, sheetWrite.sheet, 'A1', sheetWrite.values);
-  }
+  const clearRanges = sheetWrites.map(sw => `${sw.sheet}!A1:Z1000`);
+  await s.spreadsheets.values.batchClear({
+    spreadsheetId: SHEET_ID,
+    requestBody: { ranges: clearRanges }
+  });
+
+  const updateData = sheetWrites.map(sw => ({
+    range: `${sw.sheet}!A1`,
+    values: sw.values
+  }));
+  await s.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: updateData
+    }
+  });
+
+  console.log(`[PRODUCT_ANALYTICS_ROWS_WRITTEN] ${prodVals.length}`);
+  console.log(`[PAGE_METRICS_ROWS_WRITTEN] 0 (OBSOLETE SHEET)`);
+  console.log(`[REVENUE_ROWS_WRITTEN] ${revVals.length}`);
+  console.log('[DASHBOARD_REBUILD_COMPLETE] All dashboard sheets rebuilt successfully');
 
   console.log('[DASHBOARD] Injecting charts via batchUpdate...');
   try {
@@ -995,10 +1015,31 @@ async function populateDashboardSheet(s) {
   await buildDashboardSheets(s);
 }
 
+let isBuildingDashboard = false;
+let lastDashboardBuildTime = 0;
+const DASHBOARD_BUILD_INTERVAL = 5 * 60 * 1000;
+
 exports.populateDashboardSheet = async () => {
-  const s = await sheets();
-  await ensureAnalyticsSheetExists(s);
-  await buildDashboardSheets(s);
+  if (isBuildingDashboard) {
+    console.log('[DASHBOARD_BUILD_SKIPPED] Build already in progress');
+    return;
+  }
+
+  if (Date.now() - lastDashboardBuildTime < DASHBOARD_BUILD_INTERVAL) {
+    console.log('[DASHBOARD_BUILD_SKIPPED] Minimum rebuild interval not reached');
+    return;
+  }
+
+  isBuildingDashboard = true;
+
+  try {
+    const s = await sheets();
+    await ensureAnalyticsSheetExists(s);
+    await buildDashboardSheets(s);
+    lastDashboardBuildTime = Date.now();
+  } finally {
+    isBuildingDashboard = false;
+  }
 };
 
 exports.ensureDashboardSheetExists = async () => {
