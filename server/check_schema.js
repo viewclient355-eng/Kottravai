@@ -1,28 +1,29 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-const { Pool } = require('pg');
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || process.env.VITE_DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
+const db = require('./db');
 
 async function checkSchema() {
     try {
-        const res = await pool.query(`
-            SELECT column_name, data_type, is_nullable, column_default
-            FROM information_schema.columns 
-            WHERE table_name = 'products'
+        const res = await db.query(`
+            SELECT conname, pg_get_constraintdef(c.oid)
+            FROM pg_constraint c
+            JOIN pg_namespace n ON n.oid = c.connamespace
+            WHERE conrelid = 'affiliates'::regclass;
         `);
-        console.log('--- Products Table Schema ---');
-        res.rows.forEach(r => {
-            console.log(`${r.column_name.padEnd(20)} | ${r.data_type.padEnd(15)} | Null: ${r.is_nullable} | Default: ${r.column_default}`);
-        });
-        await pool.end();
-    } catch (err) {
-        console.error('❌ Schema check failed:', err.message);
-        process.exit(1);
+        console.log("Constraints on affiliates:");
+        res.rows.forEach(r => console.log(r.conname, ":", r.pg_get_constraintdef));
+
+        const res2 = await db.query(`
+            SELECT indexname, indexdef
+            FROM pg_indexes
+            WHERE tablename = 'affiliates';
+        `);
+        console.log("\nIndexes on affiliates:");
+        res2.rows.forEach(r => console.log(r.indexname, ":", r.indexdef));
+    } catch (e) {
+        console.error(e);
+    } finally {
+        process.exit(0);
     }
 }
-
 checkSchema();

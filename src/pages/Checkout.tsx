@@ -9,12 +9,15 @@ import toast from 'react-hot-toast';
 import analytics from '@/utils/analyticsService';
 import { LOCATION_DATA } from '@/data/locationData';
 import { useAuth } from '@/context/AuthContext';
+import { useGuestAuth } from '@/contexts/GuestAuthContext';
 import { useProducts } from '@/context/ProductContext';
+import GuestCheckoutModal from '@/components/GuestCheckoutModal';
 
 import { API_ENDPOINTS } from '@/config/api';
 
 const Checkout = () => {
     const { isAuthenticated, openLoginModal, user } = useAuth();
+    const guestAuth = useGuestAuth();
     const {
         cart,
         cartTotal,
@@ -49,6 +52,7 @@ const Checkout = () => {
     const [isPincodeLoading, setIsPincodeLoading] = useState(false);
     const [pincodeError, setPincodeError] = useState('');
     const [isLookupSuccess, setIsLookupSuccess] = useState(false);
+    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
     const hasUnlockedFreeShipping = useRef(false);
 
     // Sync local coupon code with context
@@ -90,8 +94,13 @@ const Checkout = () => {
                 email: prev.email || user.email || '',
                 phone: prev.phone || user.mobile || ''
             }));
+        } else if (guestAuth.profile) {
+            setFormData(prev => ({
+                ...prev,
+                phone: prev.phone || guestAuth.profile?.phone || ''
+            }));
         }
-    }, [user]);
+    }, [user, guestAuth.profile]);
 
     // Track Checkout Started
     useEffect(() => {
@@ -214,7 +223,9 @@ const Checkout = () => {
                     currency: "INR",
                     referral_code: localStorage.getItem('kottravai_affiliate_ref'),
                     orderData: {
-                        customerName: formData.fullName,
+                        customerId: user?.id || guestAuth.profile?.id,
+                        guest_order: !user && !!guestAuth.profile,
+                        customerName: formData.fullName || 'Guest User',
                         customerEmail: formData.email,
                         customerPhone: formData.phone,
                         address: formData.address,
@@ -371,7 +382,7 @@ const Checkout = () => {
         }
     };
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !guestAuth.isAuthenticated) {
         return (
             <MainLayout>
                 <div className="min-h-[70vh] flex flex-col items-center justify-center p-4 bg-gray-50 font-sans">
@@ -379,21 +390,49 @@ const Checkout = () => {
                         <div className="w-16 h-16 bg-[#b5128f]/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
                             <Lock size={32} className="text-[#b5128f]" />
                         </div>
-                        <h2 className="text-2xl font-bold text-[#2D1B4E] mb-3">Login to Checkout</h2>
+                        <h2 className="text-2xl font-bold text-[#2D1B4E] mb-3">Checkout</h2>
                         <p className="text-gray-500 mb-8 leading-relaxed">
-                            To ensure your order is saved to your account and for a secure shopping experience, please sign in.
+                            Log in to your account for a faster checkout, or continue as a guest.
                         </p>
-                        <button
-                            onClick={openLoginModal}
-                            className="w-full bg-[#b5128f] text-white font-black uppercase tracking-[0.2em] py-4 rounded-xl hover:bg-[#910e73] transition-all transform active:scale-95 shadow-xl shadow-[#b5128f]/20 flex items-center justify-center gap-2"
-                        >
-                            Sign In / Register
-                        </button>
-                        <Link to="/cart" className="inline-block mt-6 text-sm font-bold text-gray-400 hover:text-[#b5128f] transition-colors">
+                        
+                        <div className="space-y-4">
+                            <button
+                                onClick={openLoginModal}
+                                className="w-full bg-[#b5128f] text-white font-black uppercase tracking-[0.2em] py-4 rounded-xl hover:bg-[#910e73] transition-all transform active:scale-95 shadow-xl shadow-[#b5128f]/20 flex items-center justify-center gap-2"
+                            >
+                                Sign In / Register
+                            </button>
+                            
+                            <div className="relative flex items-center py-2">
+                                <div className="flex-grow border-t border-gray-200"></div>
+                                <span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-bold uppercase tracking-widest">or</span>
+                                <div className="flex-grow border-t border-gray-200"></div>
+                            </div>
+                            
+                            <button
+                                onClick={() => {
+                                    setIsGuestModalOpen(true);
+                                    analytics.trackEvent('guest_checkout_started');
+                                }}
+                                className="w-full bg-white text-gray-700 border-2 border-gray-200 font-black uppercase tracking-[0.2em] py-4 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                Continue as Guest
+                            </button>
+                        </div>
+                        
+                        <Link to="/cart" className="inline-block mt-8 text-sm font-bold text-gray-400 hover:text-[#b5128f] transition-colors">
                             Return to Cart
                         </Link>
                     </div>
                 </div>
+                
+                <GuestCheckoutModal 
+                    isOpen={isGuestModalOpen} 
+                    onClose={() => setIsGuestModalOpen(false)}
+                    onSuccess={() => {
+                        setIsGuestModalOpen(false);
+                    }}
+                />
             </MainLayout>
         );
     }

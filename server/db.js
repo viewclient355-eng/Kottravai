@@ -38,7 +38,11 @@ if (!process.env.DATABASE_URL && !process.env.VITE_DATABASE_URL) {
 
         pool = new Pool({
             connectionString: connStr,
-            ssl: { rejectUnauthorized: false }
+            ssl: { rejectUnauthorized: false },
+            connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
+            idleTimeoutMillis: 30000,      // Close idle clients after 30 seconds
+            keepAlive: true,
+            max: 20
         });
     } catch (err) {
         console.error("❌ ERROR: Failed to create Postgres Pool:", err);
@@ -58,7 +62,32 @@ if (pool.query) {
         .catch(err => console.error('⚠️ DB Warmup failed:', err.message));
 }
 
+const queryWithRetry = async (text, params, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+        const queryStart = Date.now();
+        if (i === 0) console.log(`[DB_QUERY_START] ${text.substring(0, 100)}...`);
+        else console.log(`[DB_QUERY_RETRY] Attempt ${i + 1}/${retries} for ${text.substring(0, 100)}...`);
+
+        try {
+            const result = await pool.query(text, params);
+            console.log(`[DB_QUERY_SUCCESS] Completed in ${Date.now() - queryStart}ms`);
+            return result;
+        } catch (err) {
+            const isConnectionError = err.code === 'ETIMEDOUT' || err.code === 'ECONNRESET' || err.message.includes('Connection terminated') || err.message.includes('timeout exceeded');
+            
+            if (isConnectionError && i < retries - 1) {
+                console.warn(`[SUPABASE_ERROR] Connection dropped (${err.message}). Retrying...`);
+                await new Promise(res => setTimeout(res, 500)); // wait half a sec before retrying
+                continue;
+            }
+            
+            console.error(`[DB_QUERY_FAILED] Error: ${err.message} after ${Date.now() - queryStart}ms`);
+            throw err;
+        }
+    }
+};
+
 module.exports = {
-    query: (text, params) => pool.query(text, params),
+    query: queryWithRetry,
     pool
 };

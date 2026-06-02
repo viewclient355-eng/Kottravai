@@ -42,7 +42,8 @@ export async function trackEvent(eventType, data = {}) {
     };
 
     // send asynchronously, don't block UI
-    axios.post(`${API_BASE}/track/event`, payload).catch(err => {
+    const baseUrl = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE;
+    axios.post(`${baseUrl}/api/track/event`, payload).catch(err => {
       console.warn('Tracking send failed', err?.message || err);
     });
   } catch (err) {
@@ -55,7 +56,8 @@ export async function trackBatch(events = []) {
   try {
     const session_id = getSession();
     const enriched = events.map(e => ({ ...e, session_id, timestamp: e.timestamp || new Date().toISOString() }));
-    axios.post(`${API_BASE}/track/batch`, { events: enriched }).catch(() => {});
+    const baseUrl = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE;
+    axios.post(`${baseUrl}/api/track/batch`, { events: enriched }).catch(() => {});
   } catch (e) { }
 }
 

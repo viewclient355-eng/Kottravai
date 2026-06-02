@@ -3590,6 +3590,8 @@ if (require.main === module) {
 
         const server = app.listen(port, () => {
             console.log(`✅ Server running on port ${port}`);
+            console.log(`ANALYTICS_MODE=${process.env.ANALYTICS_MODE || 'legacy'}`);
+            console.log(`Tracking Target=${(process.env.ANALYTICS_MODE === 'raw_events') ? 'Raw Events' : 'Legacy Webhook'}`);
         });
 
         server.on('error', (err) => {

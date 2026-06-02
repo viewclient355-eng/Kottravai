@@ -223,20 +223,22 @@ const LoginModal: React.FC = () => {
                             <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight leading-tight">
                                 {mode === 'login' ? 'Welcome Back' : mode === 'signup' ? 'Create an account' : 'Verify Account'}
                             </h2>
-                            <p className="mt-2 text-xs sm:text-sm text-gray-500 font-medium">
-                                {mode === 'login' ? (
-                                    <>New to Kottravai? <button onClick={() => setMode('signup')} className="text-[#b5128f] font-bold hover:underline">Join Now</button></>
-                                ) : mode === 'signup' ? (
-                                    <>Already have an account? <button onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Log in</button></>
-                                ) : (
-                                    <>Back to <button onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Sign in</button></>
-                                )}
-                            </p>
+                            <div className="mt-2 flex flex-col gap-1">
+                                <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                                    {mode === 'login' ? (
+                                        <>New to Kottravai? <button type="button" onClick={() => setMode('signup')} className="text-[#b5128f] font-bold hover:underline">Join Now</button></>
+                                    ) : mode === 'signup' ? (
+                                        <>Already have an account? <button type="button" onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Log in</button></>
+                                    ) : (
+                                        <>Back to <button type="button" onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Sign in</button></>
+                                    )}
+                                </p>
+                            </div>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-3">
                         <div className="space-y-3">
-                            {/* Username field (Signup only) */}
+                            {/* Username field (Signup) */}
                             {mode === 'signup' && (
                                 <div className="relative group">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#b5128f] transition-colors">
@@ -245,7 +247,7 @@ const LoginModal: React.FC = () => {
                                     <input
                                         type="text"
                                         placeholder="Username"
-                                        required
+                                        required={mode === 'signup'}
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         onFocus={handleInputFocus}
@@ -290,7 +292,7 @@ const LoginModal: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Mobile field (Signup and Forgot only) */}
+                            {/* Mobile field (Signup and Forgot) */}
                             {(mode === 'signup' || mode === 'forgot') && (
                                 <div className="relative group">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#25D366] transition-colors">
@@ -329,15 +331,15 @@ const LoginModal: React.FC = () => {
                                             <div className="flex items-center justify-between">
                                                 <label className="text-[9px] font-black text-emerald-800 uppercase tracking-widest">Verify WhatsApp Code</label>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="relative flex items-center w-full">
                                                 <input
                                                     type="text"
-                                                    placeholder="OTP"
+                                                    placeholder="Enter 6-digit OTP"
                                                     required
                                                     maxLength={6}
                                                     value={otp}
                                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                                    className="flex-1 px-4 py-3 bg-white border-2 border-emerald-200 rounded-xl text-center text-lg font-black tracking-[0.5em] text-emerald-900 focus:border-emerald-500 outline-none transition-all"
+                                                    className="w-full pl-6 pr-[100px] py-4 bg-white border-2 border-emerald-200 rounded-2xl text-lg font-black tracking-[0.3em] text-emerald-900 focus:border-emerald-500 outline-none transition-all"
                                                 />
                                                 <button
                                                     type="button"
@@ -353,7 +355,7 @@ const LoginModal: React.FC = () => {
                                                         setIsSubmitting(false);
                                                     }}
                                                     disabled={otp.length !== 6 || isSubmitting}
-                                                    className="px-6 bg-[#25D366] text-white rounded-xl font-bold text-xs uppercase hover:bg-[#1da851] transition-colors disabled:bg-gray-200"
+                                                    className="absolute right-2 top-2 bottom-2 px-6 bg-[#25D366] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#1da851] transition-all disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-50"
                                                 >
                                                     Verify
                                                 </button>
@@ -439,15 +441,15 @@ const LoginModal: React.FC = () => {
                         )}
 
                         <button
-                            type="submit"
-                            disabled={isSubmitting || (mode === 'signup' && !isOtpVerified)}
-                            className="group relative w-full py-4 bg-[#2D1B4E] text-white font-black uppercase tracking-[0.3em] text-[12px] rounded-full hover:bg-[#b5128f] hover:scale-[1.02] transition-all transform active:scale-[0.98] shadow-xl shadow-purple-900/20 disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed border-none outline-none"
-                        >
-                            <span className="relative z-10 flex items-center justify-center gap-4">
-                                {isSubmitting ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Update Password'}
-                                {!isSubmitting && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
-                            </span>
-                        </button>
+                                type="submit"
+                                disabled={isSubmitting || (mode === 'signup' && !isOtpVerified)}
+                                className="group relative w-full py-4 bg-[#2D1B4E] text-white font-black uppercase tracking-[0.3em] text-[12px] rounded-full hover:bg-[#b5128f] hover:scale-[1.02] transition-all transform active:scale-[0.98] shadow-xl shadow-purple-900/20 disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed border-none outline-none"
+                            >
+                                <span className="relative z-10 flex items-center justify-center gap-4">
+                                    {isSubmitting ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Update Password'}
+                                    {!isSubmitting && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
+                                </span>
+                            </button>
 
                         {(mode === 'login' || mode === 'signup') && (
                             <div className="flex items-center gap-4 py-2">

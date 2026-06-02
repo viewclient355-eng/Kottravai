@@ -14,6 +14,7 @@ import { OrderProvider } from './context/OrderContext'
 import { PartnerProvider } from './context/PartnerContext'
 import { AuthProvider } from './context/AuthContext'
 import { WishlistProvider } from './context/WishlistContext'
+import { GuestAuthProvider } from './contexts/GuestAuthContext'
 // Analytics initialization handled by analyticsService.ts singleton
 // No manual init required here
 
@@ -22,23 +23,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <HelmetProvider>
             <BrowserRouter>
                 <AuthProvider>
-                    <ProductProvider>
-                        <CartProvider>
-                            <VideoProvider>
-                                <NewsProvider>
-                                    <PartnerProvider>
-                                        <ReviewProvider>
-                                            <OrderProvider>
-                                                <WishlistProvider>
-                                                    <App />
-                                                </WishlistProvider>
-                                            </OrderProvider>
-                                        </ReviewProvider>
-                                    </PartnerProvider>
-                                </NewsProvider>
-                            </VideoProvider>
-                        </CartProvider>
-                    </ProductProvider>
+                    <GuestAuthProvider>
+                        <ProductProvider>
+                            <CartProvider>
+                                <VideoProvider>
+                                    <NewsProvider>
+                                        <PartnerProvider>
+                                            <ReviewProvider>
+                                                <OrderProvider>
+                                                    <WishlistProvider>
+                                                        <App />
+                                                    </WishlistProvider>
+                                                </OrderProvider>
+                                            </ReviewProvider>
+                                        </PartnerProvider>
+                                    </NewsProvider>
+                                </VideoProvider>
+                            </CartProvider>
+                        </ProductProvider>
+                    </GuestAuthProvider>
                 </AuthProvider>
             </BrowserRouter>
         </HelmetProvider>

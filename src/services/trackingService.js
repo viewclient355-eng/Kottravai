@@ -33,22 +33,22 @@ function enrich(payload) {
 export async function trackEvent(eventType, payload = {}) {
   try {
     const data = enrich({ event_type: eventType, ...payload });
-    // fire-and-forget; still attempt network send with retry
-    sendWithRetry(`${API_BASE}/track/event`, data).catch(() => {});
-    return data;
+    // fire-and-forget; still attempt network
+    const baseUrl = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE;
+    sendWithRetry(`${baseUrl}/api/track/event`, data).catch(() => {});
   } catch (err) {
     console.warn('trackEvent error', err);
-    return null;
   }
 }
 
 export async function trackBatch(events = []) {
   if (!events.length) return;
-  const enriched = events.map(e => enrich(e));
   try {
-    sendWithRetry(`${API_BASE}/track/batch`, { events: enriched }).catch(() => {});
-    return enriched;
-  } catch (e) { return null; }
+    const session_id = sessionUtils.getSessionId();
+    const enriched = events.map(e => ({ ...e, session_id, timestamp: e.timestamp || new Date().toISOString() }));
+    const baseUrl = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE;
+    sendWithRetry(`${baseUrl}/api/track/batch`, { events: enriched }).catch(() => {});
+  } catch (e) { }
 }
 
 export default { trackEvent, trackBatch };
