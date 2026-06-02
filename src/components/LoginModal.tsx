@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, EyeOff, Mail, User, Lock, ArrowRight, RefreshCw, Smartphone, Check } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useGuestAuth } from '@/contexts/GuestAuthContext';
 
 const LoginModal: React.FC = () => {
     const { isLoginModalOpen, closeLoginModal, login, signUp, sendWhatsAppOTP, verifyWhatsAppOTP, resetPasswordWithOTP } = useAuth();
+    const guestAuth = useGuestAuth();
     const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
     const [showPassword, setShowPassword] = useState(false);
 
@@ -78,13 +80,24 @@ const LoginModal: React.FC = () => {
         setIsSubmitting(true);
         setError(null);
         try {
-            const { error: otpError } = await sendWhatsAppOTP(mobile, mode === 'forgot' ? 'forgot' : 'signup');
-            if (otpError) {
-                setError(otpError.message || "Failed to send OTP.");
+            if (mode === 'guest_otp') {
+                const success = await guestAuth.sendOTP(mobile);
+                if (!success) {
+                    setError("Failed to send OTP.");
+                } else {
+                    setIsOtpSent(true);
+                    setOtpTimer(60);
+                    setSuccessMessage("OTP sent to your WhatsApp!");
+                }
             } else {
-                setIsOtpSent(true);
-                setOtpTimer(60);
-                setSuccessMessage("OTP sent to your WhatsApp!");
+                const { error: otpError } = await sendWhatsAppOTP(mobile, mode === 'forgot' ? 'forgot' : 'signup');
+                if (otpError) {
+                    setError(otpError.message || "Failed to send OTP.");
+                } else {
+                    setIsOtpSent(true);
+                    setOtpTimer(60);
+                    setSuccessMessage("OTP sent to your WhatsApp!");
+                }
             }
         } catch (err) {
             setError("An error occurred. Please try again.");
@@ -134,6 +147,11 @@ const LoginModal: React.FC = () => {
                         resetFields();
                     }, 2000);
                 }
+            } else if (mode === 'guest_otp') {
+                // For guest OTP, the verification itself acts as the login mechanism.
+                // Assuming `verifyWhatsAppOTP` is sufficient to establish a session,
+                // we can just close the modal upon success.
+                closeLoginModal();
             }
         } catch (err: any) {
             setError("An unexpected error occurred. Please try again.");
@@ -221,31 +239,40 @@ const LoginModal: React.FC = () => {
                     <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center hide-modal-scrollbar">
                         <div className="mb-6">
                             <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight leading-tight">
-                                {mode === 'login' ? 'Welcome Back' : mode === 'signup' ? 'Create an account' : 'Verify Account'}
+                                {mode === 'login' ? 'Welcome Back' : mode === 'signup' ? 'Create an account' : mode === 'guest_otp' ? 'Guest Login' : 'Verify Account'}
                             </h2>
-                            <p className="mt-2 text-xs sm:text-sm text-gray-500 font-medium">
-                                {mode === 'login' ? (
-                                    <>New to Kottravai? <button onClick={() => setMode('signup')} className="text-[#b5128f] font-bold hover:underline">Join Now</button></>
-                                ) : mode === 'signup' ? (
-                                    <>Already have an account? <button onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Log in</button></>
-                                ) : (
-                                    <>Back to <button onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Sign in</button></>
+                            <div className="mt-2 flex flex-col gap-1">
+                                <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                                    {mode === 'login' ? (
+                                        <>New to Kottravai? <button type="button" onClick={() => setMode('signup')} className="text-[#b5128f] font-bold hover:underline">Join Now</button></>
+                                    ) : mode === 'signup' ? (
+                                        <>Already have an account? <button type="button" onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Log in</button></>
+                                    ) : mode === 'forgot' ? (
+                                        <>Back to <button type="button" onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Sign in</button></>
+                                    ) : (
+                                        <>Back to <button type="button" onClick={() => setMode('login')} className="text-[#b5128f] font-bold hover:underline">Sign in</button></>
+                                    )}
+                                </p>
+                                {mode === 'login' && (
+                                    <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                                        Prefer no passwords? <button type="button" onClick={() => setMode('guest_otp')} className="text-[#b5128f] font-bold hover:underline">Continue as Guest via OTP</button>
+                                    </p>
                                 )}
-                            </p>
+                            </div>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-3">
                         <div className="space-y-3">
-                            {/* Username field (Signup only) */}
-                            {mode === 'signup' && (
+                            {/* Username field (Signup and Guest OTP) */}
+                            {(mode === 'signup' || mode === 'guest_otp') && (
                                 <div className="relative group">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#b5128f] transition-colors">
                                         <User size={18} />
                                     </div>
                                     <input
                                         type="text"
-                                        placeholder="Username"
-                                        required
+                                        placeholder={mode === 'guest_otp' ? "Username (Optional)" : "Username"}
+                                        required={mode === 'signup'}
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         onFocus={handleInputFocus}
@@ -290,8 +317,8 @@ const LoginModal: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Mobile field (Signup and Forgot only) */}
-                            {(mode === 'signup' || mode === 'forgot') && (
+                            {/* Mobile field (Signup, Forgot, and Guest OTP) */}
+                            {(mode === 'signup' || mode === 'forgot' || mode === 'guest_otp') && (
                                 <div className="relative group">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#25D366] transition-colors">
                                         <Smartphone size={18} />
@@ -309,8 +336,8 @@ const LoginModal: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Email OTP Verification (Signup and Forgot) */}
-                            {(mode === 'signup' || mode === 'forgot') && (
+                            {/* Email OTP Verification (Signup, Forgot, and Guest OTP) */}
+                            {(mode === 'signup' || mode === 'forgot' || mode === 'guest_otp') && (
                                 <div className="space-y-3">
                                     <div className="relative group w-full">
                                             <button
@@ -329,31 +356,43 @@ const LoginModal: React.FC = () => {
                                             <div className="flex items-center justify-between">
                                                 <label className="text-[9px] font-black text-emerald-800 uppercase tracking-widest">Verify WhatsApp Code</label>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="relative flex items-center w-full">
                                                 <input
                                                     type="text"
-                                                    placeholder="OTP"
+                                                    placeholder="Enter 6-digit OTP"
                                                     required
                                                     maxLength={6}
                                                     value={otp}
                                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                                    className="flex-1 px-4 py-3 bg-white border-2 border-emerald-200 rounded-xl text-center text-lg font-black tracking-[0.5em] text-emerald-900 focus:border-emerald-500 outline-none transition-all"
+                                                    className="w-full pl-6 pr-[100px] py-4 bg-white border-2 border-emerald-200 rounded-2xl text-lg font-black tracking-[0.3em] text-emerald-900 focus:border-emerald-500 outline-none transition-all"
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={async () => {
                                                         if (otp.length !== 6) return;
                                                         setIsSubmitting(true);
-                                                        const { error: vErr } = await verifyWhatsAppOTP(mobile, otp);
-                                                        if (vErr) setError(vErr.message);
-                                                        else {
-                                                            setIsOtpVerified(true);
-                                                            setSuccessMessage("WhatsApp verified! You can now complete registration.");
+                                                        if (mode === 'guest_otp') {
+                                                            const success = await guestAuth.verifyOTP(mobile, otp);
+                                                            if (!success) {
+                                                                setError("Invalid or expired OTP");
+                                                            } else {
+                                                                setIsOtpVerified(true);
+                                                                const finalUsername = username.trim() || 'Guest_' + Math.floor(Math.random() * 1000000);
+                                                                setSuccessMessage(`WhatsApp verified! Welcome, ${finalUsername}!`);
+                                                                setTimeout(() => closeLoginModal(), 1500);
+                                                            }
+                                                        } else {
+                                                            const { error: vErr } = await verifyWhatsAppOTP(mobile, otp);
+                                                            if (vErr) setError(vErr.message);
+                                                            else {
+                                                                setIsOtpVerified(true);
+                                                                setSuccessMessage("WhatsApp verified! You can now complete registration.");
+                                                            }
                                                         }
                                                         setIsSubmitting(false);
                                                     }}
                                                     disabled={otp.length !== 6 || isSubmitting}
-                                                    className="px-6 bg-[#25D366] text-white rounded-xl font-bold text-xs uppercase hover:bg-[#1da851] transition-colors disabled:bg-gray-200"
+                                                    className="absolute right-2 top-2 bottom-2 px-6 bg-[#25D366] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#1da851] transition-all disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-50"
                                                 >
                                                     Verify
                                                 </button>
@@ -382,7 +421,7 @@ const LoginModal: React.FC = () => {
                             )}
 
                             {/* Password field - Tightened padding */}
-                            {(mode !== 'forgot' || isOtpVerified) && (
+                            {mode !== 'guest_otp' && (mode !== 'forgot' || isOtpVerified) && (
                                 <div className="relative group">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#b5128f] transition-colors">
                                         <Lock size={18} />
@@ -438,16 +477,18 @@ const LoginModal: React.FC = () => {
                             </div>
                         )}
 
-                        <button
-                            type="submit"
-                            disabled={isSubmitting || (mode === 'signup' && !isOtpVerified)}
-                            className="group relative w-full py-4 bg-[#2D1B4E] text-white font-black uppercase tracking-[0.3em] text-[12px] rounded-full hover:bg-[#b5128f] hover:scale-[1.02] transition-all transform active:scale-[0.98] shadow-xl shadow-purple-900/20 disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed border-none outline-none"
-                        >
-                            <span className="relative z-10 flex items-center justify-center gap-4">
-                                {isSubmitting ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Update Password'}
-                                {!isSubmitting && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
-                            </span>
-                        </button>
+                        {mode !== 'guest_otp' && (
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || (mode === 'signup' && !isOtpVerified)}
+                                className="group relative w-full py-4 bg-[#2D1B4E] text-white font-black uppercase tracking-[0.3em] text-[12px] rounded-full hover:bg-[#b5128f] hover:scale-[1.02] transition-all transform active:scale-[0.98] shadow-xl shadow-purple-900/20 disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed border-none outline-none"
+                            >
+                                <span className="relative z-10 flex items-center justify-center gap-4">
+                                    {isSubmitting ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Update Password'}
+                                    {!isSubmitting && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
+                                </span>
+                            </button>
+                        )}
 
                         {(mode === 'login' || mode === 'signup') && (
                             <div className="flex items-center gap-4 py-2">

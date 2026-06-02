@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const { validateAndRepairKey } = require('../utils/googleKeyValidator');
+const chartBuilder = require('./chartBuilder');
 
 let SHEET_ID = process.env.GOOGLE_SHEET_ID;
 let CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
@@ -116,33 +117,33 @@ const sheets = async () => {
   }
 };
 
-const DASHBOARD_SHEET_TITLE = 'Dashboard';
-const EXECUTIVE_SUMMARY_SHEET_TITLE = 'Executive Summary';
-const DAILY_REPORT_SHEET_TITLE = 'Daily Report';
-const WEEKLY_REPORT_SHEET_TITLE = 'Weekly Report';
-const MONTHLY_REPORT_SHEET_TITLE = 'Monthly Report';
-const TRAFFIC_ANALYTICS_SHEET_TITLE = 'Traffic Analytics';
-const PRODUCT_ANALYTICS_SHEET_TITLE = 'Product Analytics';
-const REVENUE_ANALYTICS_SHEET_TITLE = 'Revenue Analytics';
-const CUSTOMER_ANALYTICS_SHEET_TITLE = 'Customer Analytics';
-const MARKETING_ANALYTICS_SHEET_TITLE = 'Marketing Analytics';
-const LEAD_ANALYTICS_SHEET_TITLE = 'Lead Analytics';
-const CONVERSION_FUNNEL_SHEET_TITLE = 'Conversion Funnel';
+const EXECUTIVE_DASHBOARD_SHEET = 'Executive Dashboard';
+const VISITOR_INTELLIGENCE_SHEET = 'Visitor Intelligence';
+const TRAFFIC_ANALYTICS_SHEET = 'Traffic Analytics';
+const PRODUCT_ANALYTICS_SHEET = 'Product Analytics';
+const REVENUE_ANALYTICS_SHEET = 'Revenue Analytics';
+const CUSTOMER_ANALYTICS_SHEET = 'Customer Analytics';
+const WHATSAPP_ANALYTICS_SHEET = 'WhatsApp Analytics';
+const CONVERSION_FUNNEL_SHEET = 'Conversion Funnel';
+const DAILY_REPORT_SHEET = 'Daily Report';
+const WEEKLY_REPORT_SHEET = 'Weekly Report';
+const MONTHLY_REPORT_SHEET = 'Monthly Report';
+const LEAD_ANALYTICS_SHEET = 'Lead Analytics';
 const RAW_EVENTS_SHEET_TITLE = 'Raw Events';
 
 const DATA_SHEET_ORDER = [
-  DASHBOARD_SHEET_TITLE,
-  EXECUTIVE_SUMMARY_SHEET_TITLE,
-  DAILY_REPORT_SHEET_TITLE,
-  WEEKLY_REPORT_SHEET_TITLE,
-  MONTHLY_REPORT_SHEET_TITLE,
-  TRAFFIC_ANALYTICS_SHEET_TITLE,
-  PRODUCT_ANALYTICS_SHEET_TITLE,
-  REVENUE_ANALYTICS_SHEET_TITLE,
-  CUSTOMER_ANALYTICS_SHEET_TITLE,
-  MARKETING_ANALYTICS_SHEET_TITLE,
-  LEAD_ANALYTICS_SHEET_TITLE,
-  CONVERSION_FUNNEL_SHEET_TITLE,
+  EXECUTIVE_DASHBOARD_SHEET,
+  VISITOR_INTELLIGENCE_SHEET,
+  TRAFFIC_ANALYTICS_SHEET,
+  PRODUCT_ANALYTICS_SHEET,
+  REVENUE_ANALYTICS_SHEET,
+  CUSTOMER_ANALYTICS_SHEET,
+  WHATSAPP_ANALYTICS_SHEET,
+  CONVERSION_FUNNEL_SHEET,
+  DAILY_REPORT_SHEET,
+  WEEKLY_REPORT_SHEET,
+  MONTHLY_REPORT_SHEET,
+  LEAD_ANALYTICS_SHEET,
   RAW_EVENTS_SHEET_TITLE
 ];
 
@@ -436,250 +437,281 @@ async function writeSheetValues(s, sheetName, startCell, values) {
 }
 
 function buildAggregations(rows) {
+  const getISTDateString = (date) => {
+    return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+  };
+  const getWeekKeyIST = (date) => {
+    const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    d.setDate(d.getDate() - d.getDay()); // Start of week (Sunday)
+    return d.getFullYear() + '-W' + Math.ceil((d.getDate() + 6 - d.getDay()) / 7); // Using ISO format roughly
+  };
+  const getMonthKeyIST = (date) => {
+    const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const sessions = new Map();
+  const visitorFirstSeen = new Map();
+  const products = new Map();
   const daily = new Map();
   const weekly = new Map();
   const monthly = new Map();
-  const products = new Map();
+  const exitPages = new Map();
   const utmSources = new Map();
-  const utmSourceOrders = new Map();
-  const utmSourceRevenue = new Map();
-  const customers = new Map();
-  const funnel = {
-    visitors: new Set(),
-    product_views: 0,
-    add_to_cart: 0,
-    checkout_started: 0,
+  
+  const globalFunnel = {
+    pageViews: 0,
+    productViews: 0,
+    addToCarts: 0,
+    checkoutStarted: 0,
+    guestCheckoutStarted: 0,
+    otpSent: 0,
+    otpVerified: 0,
     purchases: 0
   };
 
-  let totalRevenue = 0;
-  let totalOrders = 0;
-  const visitorFirstSeen = new Map();
-  const buyerVisitors = new Set();
+  const globalGuest = {
+    guestCheckouts: 0,
+    orders: 0,
+    revenue: 0,
+    otpSent: 0,
+    otpVerified: 0
+  };
 
+  const leadData = {
+    whatsappClicks: 0,
+    contactForms: 0
+  };
+
+  // 1. Process rows sequentially
   rows.forEach(row => {
-    const timestamp = parseDate(row.Timestamp);
-    if (!timestamp) return;
+    const timestampStr = row['timestamp'];
+    if (!timestampStr) return;
+    const time = new Date(timestampStr).getTime();
+    if (isNaN(time)) return;
 
-    const eventType = normalizeValue(row['Event Type']).toLowerCase();
-    const visitorId = normalizeValue(row['Visitor ID']) || normalizeValue(row['Session ID']) || 'anonymous';
-    const productName = normalizeValue(row['Product Name']);
-    const category = normalizeValue(row['Category']);
-    const utmSource = normalizeValue(row['UTM Source']) || 'Direct';
-    const utmMedium = normalizeValue(row['UTM Medium']) || 'Unknown';
-    const utmCampaign = normalizeValue(row['UTM Campaign']) || 'Unknown';
-    const orderTotal = getSafeNumber(row['Order Total'] || row['total_amount'] || row['price'] * row['quantity']);
-    const dateKey = `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}`;
-    const weekKey = getWeekKey(timestamp);
-    const monthKey = getMonthKey(timestamp);
-    const visitorKey = visitorId;
+    const visitorId = row['visitor_id'];
+    const sessionId = row['session_id'];
+    const eventType = row['event_type'];
+    const revenue = getSafeNumber(row['order_total']);
+    const productId = row['product_id'];
+    const productName = row['product_name'];
+    let pageUrl = row['page'] || '';
+    if (typeof pageUrl === 'string') pageUrl = pageUrl.replace(/kottravai\.com/g, 'kottravai.in');
+    
+    let referrer = row['referrer'] || '';
+    if (typeof referrer === 'string') referrer = referrer.replace(/kottravai\.com/g, 'kottravai.in');
 
-    const previousFirstSeen = visitorFirstSeen.get(visitorKey);
-    if (!previousFirstSeen || timestamp < previousFirstSeen) {
-      visitorFirstSeen.set(visitorKey, timestamp);
+    // Default categorizations
+    let source = normalizeValue(row['utm_source']);
+    if (!source || source === 'direct' || source === '') {
+        if (referrer && referrer.includes('google')) source = 'google';
+        else if (referrer && referrer.includes('instagram')) source = 'instagram';
+        else if (referrer && referrer.includes('facebook')) source = 'facebook';
+        else if (referrer && referrer.includes('whatsapp')) source = 'whatsapp';
+        else if (referrer && !referrer.includes('kottravai') && !referrer.includes('localhost')) source = 'referral';
+        else source = 'direct';
     }
 
+    if (visitorId && (!visitorFirstSeen.has(visitorId) || time < visitorFirstSeen.get(visitorId))) {
+      visitorFirstSeen.set(visitorId, time);
+    }
+
+    if (sessionId) {
+      if (!sessions.has(sessionId)) {
+        sessions.set(sessionId, {
+          sessionId, visitorId,
+          minTime: time, maxTime: time,
+          events: 0, purchases: 0, revenue: 0,
+          productViews: 0, addToCarts: 0, checkouts: 0,
+          guestCheckouts: 0, otpSent: 0, otpVerified: 0, whatsappClicks: 0,
+          exitPage: pageUrl, source,
+          hasPurchase: false
+        });
+      }
+      const sess = sessions.get(sessionId);
+      sess.events++;
+      if (time < sess.minTime) sess.minTime = time;
+      if (time > sess.maxTime) {
+        sess.maxTime = time;
+        sess.exitPage = pageUrl;
+      }
+      
+      if (eventType === 'purchase_completed' && !sess.hasPurchase) {
+        sess.purchases++;
+        sess.revenue += revenue;
+        sess.hasPurchase = true; // Prevent double counting in same session if duplicate event
+      }
+      if (eventType === 'product_view') sess.productViews++;
+      if (eventType === 'add_to_cart') sess.addToCarts++;
+      if (eventType === 'checkout_started') sess.checkouts++;
+      if (eventType === 'guest_checkout_started') sess.guestCheckouts++;
+      if (eventType === 'otp_sent') sess.otpSent++;
+      if (eventType === 'otp_verified') sess.otpVerified++;
+      if (eventType === 'whatsapp_click') sess.whatsappClicks++;
+    }
+
+    if (productId || productName) {
+      const pKey = productId || productName;
+      if (!products.has(pKey)) {
+        products.set(pKey, { productName: productName || productId, views: 0, carts: 0, purchases: 0, revenue: 0 });
+      }
+      const p = products.get(pKey);
+      if (eventType === 'product_view') p.views++;
+      if (eventType === 'add_to_cart') p.carts++;
+      if (eventType === 'purchase_completed') {
+        p.purchases++;
+        p.revenue += revenue;
+      }
+    }
+
+    // Global Funnel directly from events (more accurate than session aggregation for raw funnels)
+    if (eventType === 'page_view') globalFunnel.pageViews++;
+    if (eventType === 'product_view') globalFunnel.productViews++;
+    if (eventType === 'add_to_cart') globalFunnel.addToCarts++;
+    if (eventType === 'checkout_started') globalFunnel.checkoutStarted++;
+    if (eventType === 'guest_checkout_started') globalFunnel.guestCheckoutStarted++;
+    if (eventType === 'otp_sent') globalFunnel.otpSent++;
+    if (eventType === 'otp_verified') globalFunnel.otpVerified++;
+    if (eventType === 'purchase_completed') globalFunnel.purchases++;
+    
+    if (eventType === 'whatsapp_click') leadData.whatsappClicks++;
+    if (eventType === 'contact_form_submit') leadData.contactForms++;
+  });
+
+  // 2. Aggregate sessions
+  Array.from(sessions.values()).forEach(sess => {
+    const sessionDate = new Date(sess.minTime);
+    const dateKey = getISTDateString(sessionDate);
+    const weekKey = getWeekKeyIST(sessionDate);
+    const monthKey = getMonthKeyIST(sessionDate);
+    
+    const firstSeen = visitorFirstSeen.get(sess.visitorId);
+    const firstSeenDateKey = getISTDateString(new Date(firstSeen));
+    const isNewToday = firstSeenDateKey === dateKey;
+    const isNewThisMonth = getMonthKeyIST(new Date(firstSeen)) === monthKey;
+    
     const ensureMapEntry = (map, key) => {
       if (!map.has(key)) {
         map.set(key, {
-          date: key,
-          visitors: new Set(),
-          pageViews: 0,
-          productViews: 0,
-          addToCart: 0,
-          checkouts: 0,
-          purchases: 0,
-          whatsappClicks: 0,
-          contactLeads: 0,
-          revenue: 0,
-          trafficSources: new Map(),
-          productCounts: new Map(),
-          categoryCounts: new Map()
+          date: key, visitors: new Set(), newVisitors: new Set(),
+          sessions: 0, bounceSessions: 0, durationTotalMs: 0,
+          orders: 0, revenue: 0, guestOrders: 0, guestRevenue: 0
         });
       }
       return map.get(key);
     };
 
-    const dailyBucket = ensureMapEntry(daily, dateKey);
-    const weeklyBucket = ensureMapEntry(weekly, weekKey);
-    const monthlyBucket = ensureMapEntry(monthly, monthKey);
+    const dBucket = ensureMapEntry(daily, dateKey);
+    const wBucket = ensureMapEntry(weekly, weekKey);
+    const mBucket = ensureMapEntry(monthly, monthKey);
 
-    dailyBucket.visitors.add(visitorKey);
-    weeklyBucket.visitors.add(visitorKey);
-    monthlyBucket.visitors.add(visitorKey);
-    funnel.visitors.add(visitorKey);
+    [dBucket, wBucket, mBucket].forEach((b, i) => {
+      b.visitors.add(sess.visitorId);
+      let isNew = false;
+      if (i === 0) isNew = isNewToday;
+      else if (i === 1) isNew = (getWeekKeyIST(new Date(firstSeen)) === weekKey);
+      else if (i === 2) isNew = isNewThisMonth;
+      if (isNew) b.newVisitors.add(sess.visitorId);
 
-    const recordSource = (map, key, amount = 1) => {
-      map.set(key, (map.get(key) || 0) + amount);
-    };
-
-    recordSource(utmSources, utmSource, 1);
-
-    const updateProductMetrics = (map) => {
-      if (!productName) return;
-      const current = map.get(productName) || { productName, pageViews: 0, addToCart: 0, purchases: 0, revenue: 0 };
-      if (eventType === 'product_view') current.pageViews += 1;
-      if (eventType === 'add_to_cart') current.addToCart += 1;
-      if (eventType === 'purchase_completed') current.purchases += 1;
-      if (orderTotal > 0) current.revenue += orderTotal;
-      map.set(productName, current);
-    };
-
-    if (eventType === 'page_view') {
-      dailyBucket.pageViews += 1;
-      weeklyBucket.pageViews += 1;
-      monthlyBucket.pageViews += 1;
-    }
-    if (eventType === 'product_view') {
-      dailyBucket.productViews += 1;
-      weeklyBucket.productViews += 1;
-      monthlyBucket.productViews += 1;
-      funnel.product_views += 1;
-      updateProductMetrics(products);
-      dailyBucket.productCounts.set(productName, (dailyBucket.productCounts.get(productName) || 0) + 1);
-      weeklyBucket.productCounts.set(productName, (weeklyBucket.productCounts.get(productName) || 0) + 1);
-      monthlyBucket.productCounts.set(productName, (monthlyBucket.productCounts.get(productName) || 0) + 1);
-    }
-    if (eventType === 'add_to_cart') {
-      dailyBucket.addToCart += 1;
-      weeklyBucket.addToCart += 1;
-      monthlyBucket.addToCart += 1;
-      funnel.add_to_cart += 1;
-      updateProductMetrics(products);
-    }
-    if (eventType === 'checkout_started') {
-      dailyBucket.checkouts += 1;
-      weeklyBucket.checkouts += 1;
-      monthlyBucket.checkouts += 1;
-      funnel.checkout_started += 1;
-    }
-    if (eventType === 'purchase_completed') {
-      dailyBucket.purchases += 1;
-      weeklyBucket.purchases += 1;
-      monthlyBucket.purchases += 1;
-      funnel.purchases += 1;
-      totalOrders += 1;
-      if (orderTotal > 0) {
-        totalRevenue += orderTotal;
-        dailyBucket.revenue += orderTotal;
-        weeklyBucket.revenue += orderTotal;
-        monthlyBucket.revenue += orderTotal;
-        recordSource(utmSourceOrders, utmSource, 1);
-        recordSource(utmSourceRevenue, utmSource, orderTotal);
+      b.sessions++;
+      if (sess.events === 1) b.bounceSessions++;
+      b.durationTotalMs += (sess.maxTime - sess.minTime);
+      
+      if (sess.purchases > 0) {
+        b.orders++;
+        b.revenue += sess.revenue;
       }
-      buyerVisitors.add(visitorKey);
-      updateProductMetrics(products);
+      
+      if (sess.guestCheckouts > 0 && sess.purchases > 0) {
+        b.guestOrders++;
+        b.guestRevenue += sess.revenue;
+      }
+    });
+
+    if (sess.guestCheckouts > 0) {
+      globalGuest.guestCheckouts++;
+      if (sess.purchases > 0) {
+        globalGuest.orders++;
+        globalGuest.revenue += sess.revenue;
+      }
     }
-    if (eventType === 'whatsapp_click') {
-      dailyBucket.whatsappClicks += 1;
-      weeklyBucket.whatsappClicks += 1;
-      monthlyBucket.whatsappClicks += 1;
-    }
-    if (eventType.includes('contact')) {
-      dailyBucket.contactLeads += 1;
-      weeklyBucket.contactLeads += 1;
-      monthlyBucket.contactLeads += 1;
+    if (sess.otpSent > 0) globalGuest.otpSent++;
+    if (sess.otpVerified > 0) globalGuest.otpVerified++;
+
+    if (sess.exitPage) {
+      exitPages.set(sess.exitPage, (exitPages.get(sess.exitPage) || 0) + 1);
     }
 
-    const sourceKey = normalizeValue(utmSource || 'Direct');
-    dailyBucket.trafficSources.set(sourceKey, (dailyBucket.trafficSources.get(sourceKey) || 0) + 1);
-    weeklyBucket.trafficSources.set(sourceKey, (weeklyBucket.trafficSources.get(sourceKey) || 0) + 1);
-    monthlyBucket.trafficSources.set(sourceKey, (monthlyBucket.trafficSources.get(sourceKey) || 0) + 1);
+    const srcName = sess.source.toLowerCase();
+    if (!utmSources.has(srcName)) {
+      utmSources.set(srcName, { source: srcName, visitors: new Set(), orders: 0, revenue: 0 });
+    }
+    const src = utmSources.get(srcName);
+    src.visitors.add(sess.visitorId);
+    if (sess.purchases > 0) {
+      src.orders++;
+      src.revenue += sess.revenue;
+    }
   });
 
   const sortedMap = (map, comparator) => Array.from(map.values()).sort(comparator);
-  const getTopItem = (countMap) => {
-    if (!countMap || countMap.size === 0) return '';
-    return Array.from(countMap.entries()).sort((a, b) => b[1] - a[1])[0][0] || '';
+  
+  const mapBucketToRow = (b) => {
+    const repeatVis = b.visitors.size - b.newVisitors.size;
+    return {
+      date: b.date,
+      visitors: b.visitors.size,
+      newVisitors: b.newVisitors.size,
+      repeatVisitors: repeatVis,
+      repeatRatio: b.visitors.size > 0 ? (repeatVis / b.visitors.size) : 0,
+      sessions: b.sessions,
+      avgSessionDurationMins: b.sessions > 0 ? ((b.durationTotalMs / b.sessions) / 60000) : 0,
+      bounceRate: b.sessions > 0 ? (b.bounceSessions / b.sessions) : 0,
+      orders: b.orders,
+      revenue: b.revenue,
+      aov: b.orders > 0 ? (b.revenue / b.orders) : 0,
+      revPerVisitor: b.visitors.size > 0 ? (b.revenue / b.visitors.size) : 0,
+      purchaseConversionRate: b.visitors.size > 0 ? (b.orders / b.visitors.size) : 0,
+      guestOrders: b.guestOrders,
+      guestRevenue: b.guestRevenue
+    };
   };
 
-  const dailyRows = sortedMap(daily, (a, b) => a.date.localeCompare(b.date)).map(day => ({
-    date: day.date,
-    visitors: day.visitors.size,
-    pageViews: day.pageViews,
-    productViews: day.productViews,
-    addToCart: day.addToCart,
-    checkouts: day.checkouts,
-    purchases: day.purchases,
-    whatsappClicks: day.whatsappClicks,
-    contactLeads: day.contactLeads,
-    revenue: day.revenue,
-    conversionRate: day.checkouts === 0 ? 0 : day.purchases / day.checkouts,
-    topProduct: getTopItem(day.productCounts),
-    topCategory: getTopItem(day.categoryCounts),
-    topTrafficSource: getTopItem(day.trafficSources)
-  }));
-
-  const weeklyRows = sortedMap(weekly, (a, b) => a.date.localeCompare(b.date)).map(week => ({
-    week: week.date,
-    visitors: week.visitors.size,
-    orders: week.purchases,
-    revenue: week.revenue,
-    conversionRate: week.checkouts === 0 ? 0 : week.purchases / week.checkouts,
-    topProduct: getTopItem(week.productCounts),
-    topCategory: getTopItem(week.categoryCounts),
-    topTrafficSource: getTopItem(week.trafficSources)
-  }));
-
-  const monthlyRows = sortedMap(monthly, (a, b) => a.date.localeCompare(b.date)).map(month => ({
-    month: month.date,
-    visitors: month.visitors.size,
-    orders: month.purchases,
-    revenue: month.revenue,
-    conversionRate: month.checkouts === 0 ? 0 : month.purchases / month.checkouts
-  }));
+  const dailyRows = sortedMap(daily, (a, b) => a.date.localeCompare(b.date)).map(mapBucketToRow);
+  const weeklyRows = sortedMap(weekly, (a, b) => a.date.localeCompare(b.date)).map(mapBucketToRow);
+  const monthlyRows = sortedMap(monthly, (a, b) => a.date.localeCompare(b.date)).map(mapBucketToRow);
 
   const productRows = Array.from(products.values())
-    .map(product => ({
-      productName: product.productName,
-      productViews: product.pageViews,
-      cartAdds: product.addToCart,
-      purchases: product.purchases,
-      revenue: product.revenue,
-      conversionRate: product.pageViews === 0 ? 0 : product.purchases / product.pageViews
+    .sort((a, b) => b.revenue - a.revenue || b.views - a.views);
+
+  const utmRows = Array.from(utmSources.values())
+    .map(src => ({
+      source: src.source,
+      visitors: src.visitors.size,
+      orders: src.orders,
+      revenue: src.revenue,
+      conversionRate: src.visitors.size > 0 ? (src.orders / src.visitors.size) : 0
     }))
-    .sort((a, b) => b.revenue - a.revenue || b.productViews - a.productViews)
-    .slice(0, 50);
+    .sort((a, b) => b.revenue - a.revenue || b.visitors - a.visitors);
 
-  const utmRows = Array.from(utmSources.entries())
-    .map(([source, count]) => ({ source, visitors: count, orders: utmSourceOrders.get(source) || 0, revenue: utmSourceRevenue.get(source) || 0 }))
-    .sort((a, b) => b.visitors - a.visitors);
+  const topExitPages = Array.from(exitPages.entries())
+    .map(([page, count]) => ({ page, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
 
-  const marketingRows = utmRows.map(row => ({
-    source: row.source,
-    visitors: row.visitors,
-    orders: row.orders,
-    revenue: row.revenue,
-    conversionRate: row.visitors === 0 ? 0 : row.orders / row.visitors
-  }));
+  let totalVisitors = visitorFirstSeen.size;
+  let totalSessions = sessions.size;
+  let totalOrders = Array.from(sessions.values()).filter(s => s.purchases > 0).length;
+  let totalRevenue = Array.from(sessions.values()).reduce((sum, s) => sum + s.revenue, 0);
 
-  const newCustomers = Array.from(visitorFirstSeen.values()).filter(firstSeen => {
-    const now = new Date();
-    return firstSeen >= new Date(now.getFullYear(), now.getMonth(), 1);
-  }).length;
+  const todayStr = getISTDateString(new Date());
+  const weekStr = getWeekKeyIST(new Date());
+  const monthStr = getMonthKeyIST(new Date());
 
-  const leadRows = sortedMap(daily, (a, b) => a.date.localeCompare(b.date)).map(day => ({
-    date: day.date,
-    whatsappLeads: day.whatsappClicks,
-    contactLeads: day.contactLeads,
-    totalLeads: day.whatsappClicks + day.contactLeads
-  }));
-
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const currentWeekKey = getWeekKey(today);
-  const currentMonthKey = getMonthKey(today);
-
-  const todayMetrics = daily.get(todayKey) || {};
-  const weekMetrics = weekly.get(currentWeekKey) || {};
-  const monthMetrics = monthly.get(currentMonthKey) || {};
-
-  const funnelMetrics = {
-    visitors: funnel.visitors.size,
-    productViews: funnel.product_views,
-    addToCart: funnel.add_to_cart,
-    checkoutStarted: funnel.checkout_started,
-    purchases: funnel.purchases
+  const getBucketOrZero = (rowsArray, key) => rowsArray.find(r => r.date === key) || { 
+    visitors: 0, newVisitors: 0, repeatRatio: 0, avgSessionDurationMins: 0, bounceRate: 0,
+    orders: 0, revenue: 0, purchaseConversionRate: 0, guestOrders: 0, guestRevenue: 0, aov: 0 
   };
 
   return {
@@ -688,51 +720,27 @@ function buildAggregations(rows) {
     monthlyRows,
     productRows,
     utmRows,
-    marketingRows,
-    leadRows,
-    funnelMetrics,
-    customerMetrics: {
-      newCustomers,
-      returningCustomers: visitorFirstSeen.size - newCustomers,
-      repeatBuyers: buyerVisitors.size,
-      totalCustomers: visitorFirstSeen.size
-    },
+    topExitPages,
+    globalFunnel,
+    globalGuest,
+    leadData,
     executiveSummary: {
-      today: {
-        visitors: todayMetrics.visitors || 0,
-        orders: todayMetrics.purchases || 0,
-        revenue: todayMetrics.revenue || 0,
-        conversionRate: todayMetrics.checkouts ? (todayMetrics.purchases || 0) / todayMetrics.checkouts : 0
-      },
-      week: {
-        visitors: weekMetrics.visitors || 0,
-        orders: weekMetrics.purchases || 0,
-        revenue: weekMetrics.revenue || 0,
-        conversionRate: weekMetrics.checkouts ? (weekMetrics.purchases || 0) / weekMetrics.checkouts : 0
-      },
-      month: {
-        visitors: monthMetrics.visitors || 0,
-        orders: monthMetrics.purchases || 0,
-        revenue: monthMetrics.revenue || 0,
-        conversionRate: monthMetrics.checkouts ? (monthMetrics.purchases || 0) / monthMetrics.checkouts : 0
-      }
+      today: getBucketOrZero(dailyRows, todayStr),
+      week: getBucketOrZero(weeklyRows, weekStr),
+      month: getBucketOrZero(monthlyRows, monthStr)
     },
     summary: {
-      totalVisitors: visitorFirstSeen.size,
-      totalRevenue,
+      totalVisitors,
+      totalSessions,
       totalOrders,
-      averageOrderValue: totalOrders === 0 ? 0 : totalRevenue / totalOrders,
-      conversionRate: funnel.checkout_started === 0 ? 0 : funnel.purchases / funnel.checkout_started,
-      productViews: rows.filter(r => normalizeValue(r['Event Type']).toLowerCase() === 'product_view').length,
-      addToCart: rows.filter(r => normalizeValue(r['Event Type']).toLowerCase() === 'add_to_cart').length,
-      checkoutStarted: rows.filter(r => normalizeValue(r['Event Type']).toLowerCase() === 'checkout_started').length,
-      purchases: funnel.purchases,
-      whatsappLeads: rows.filter(r => normalizeValue(r['Event Type']).toLowerCase() === 'whatsapp_click').length,
-      contactLeads: rows.filter(r => normalizeValue(r['Event Type']).toLowerCase().includes('contact')).length
+      totalRevenue,
+      averageOrderValue: totalOrders > 0 ? (totalRevenue / totalOrders) : 0,
+      revenuePerVisitor: totalVisitors > 0 ? (totalRevenue / totalVisitors) : 0,
+      overallConversionRate: totalVisitors > 0 ? (totalOrders / totalVisitors) : 0,
+      overallRepeatRatio: totalVisitors > 0 ? ((totalVisitors - Array.from(visitorFirstSeen.entries()).filter(([v,t]) => getMonthKeyIST(new Date(t)) === monthStr).length) / totalVisitors) : 0
     }
   };
 }
-
 async function fetchRawEventRows(s) {
   const response = await s.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
@@ -741,7 +749,11 @@ async function fetchRawEventRows(s) {
   const values = response.data.values || [];
   if (values.length === 0) return [];
 
-  const headers = values[0].map(h => normalizeValue(h));
+  const normalizeKey = (key) => {
+    if (key === undefined || key === null) return '';
+    return String(key).trim().toLowerCase().replace(/\s+/g, '_');
+  };
+  const headers = values[0].map(h => normalizeKey(h));
   return values.slice(1).map(row => {
     const result = {};
     headers.forEach((header, index) => {
@@ -757,164 +769,130 @@ function formatCurrency(value) {
 }
 
 async function buildDashboardSheets(s) {
+  const formatCurrency = (value) => getSafeNumber(value).toFixed(2);
+  const formatPercent = (value) => (getSafeNumber(value) * 100).toFixed(2) + '%';
+  const formatMins = (value) => getSafeNumber(value).toFixed(1) + 'm';
+  const createEmpty = () => ['', '', '', '', '', '', ''];
+
   const spreadsheet = await getSpreadsheetMetadata(s);
   await createMissingSheets(s, spreadsheet);
   await ensureRawEventsSheetExists(s, spreadsheet);
   const refreshed = await getSpreadsheetMetadata(s);
   await createMissingSheets(s, refreshed);
+  
+  const getSheetId = (title) => refreshed.data.sheets.find(sh => sh.properties.title === title)?.properties?.sheetId;
 
   const rows = await fetchRawEventRows(s);
   const aggregation = buildAggregations(rows);
+  const ts = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-  const dashboardValues = [
-    ['Dashboard'],
-    [],
-    ['Total Visitors', aggregation.summary.totalVisitors, 'New Visitors', aggregation.executiveSummary.today.visitors, 'Repeat Visitors', aggregation.summary.totalVisitors - aggregation.executiveSummary.today.visitors],
-    ['Product Views', aggregation.summary.productViews, 'Add To Cart', aggregation.summary.addToCart, 'Checkout Started', aggregation.summary.checkoutStarted],
-    ['Purchases', aggregation.summary.purchases, 'WhatsApp Leads', aggregation.summary.whatsappLeads, 'Contact Leads', aggregation.summary.contactLeads],
-    ['Revenue', formatCurrency(aggregation.summary.totalRevenue), 'Average Order Value', formatCurrency(aggregation.summary.averageOrderValue), 'Conversion Rate', `${(aggregation.summary.conversionRate * 100).toFixed(2)}%`],
-    []
-  ];
+  const ndy = (val, formatter) => val === 0 ? 'No Data Yet' : (formatter ? formatter(val) : val);
 
-  const executiveValues = [
-    ['Executive Summary'],
-    [],
-    ['Period', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'],
-    ['Today', aggregation.executiveSummary.today.visitors, aggregation.executiveSummary.today.orders, formatCurrency(aggregation.executiveSummary.today.revenue), `${(aggregation.executiveSummary.today.conversionRate * 100).toFixed(2)}%`],
-    ['This Week', aggregation.executiveSummary.week.visitors, aggregation.executiveSummary.week.orders, formatCurrency(aggregation.executiveSummary.week.revenue), `${(aggregation.executiveSummary.week.conversionRate * 100).toFixed(2)}%`],
-    ['This Month', aggregation.executiveSummary.month.visitors, aggregation.executiveSummary.month.orders, formatCurrency(aggregation.executiveSummary.month.revenue), `${(aggregation.executiveSummary.month.conversionRate * 100).toFixed(2)}%`],
-    [],
-    ['Top Insights'],
-    [`Top product this week: ${aggregation.weeklyRows.length ? aggregation.weeklyRows[aggregation.weeklyRows.length - 1].topProduct || 'N/A' : 'N/A'}`],
-    [`WhatsApp generated ${aggregation.summary.whatsappLeads} leads`],
-    [`Repeat visitors this month: ${aggregation.customerMetrics.returningCustomers}`]
-  ];
+  const appendMeta = (vals) => {
+    vals.push(createEmpty(), ['---', '---'], ['Last Refresh (IST)', ts], ['Data Source', 'Raw Events (Single Source of Truth)']);
+    return vals;
+  };
 
-  const dailyHeader = ['Date', 'Visitors', 'Page Views', 'Product Views', 'Add To Cart', 'Checkouts', 'Purchases', 'WhatsApp Clicks', 'Contact Leads', 'Revenue', 'Conversion Rate', 'Top Product', 'Top Traffic Source'];
-  const dailyValues = [dailyHeader].concat(aggregation.dailyRows.map(row => [
-    row.date,
-    row.visitors,
-    row.pageViews,
-    row.productViews,
-    row.addToCart,
-    row.checkouts,
-    row.purchases,
-    row.whatsappClicks,
-    row.contactLeads,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`,
-    row.topProduct,
-    row.topTrafficSource
-  ]));
+  // 1. EXECUTIVE DASHBOARD
+  const execVals = appendMeta([
+    ['EXECUTIVE DASHBOARD - PERFORMANCE SUMMARY'], createEmpty(),
+    ['KEY PERFORMANCE INDICATORS', 'Current Period', '', 'GUEST METRICS', 'Current Period'],
+    ['Total Visitors', aggregation.summary.totalVisitors, '', 'Guest Orders', ndy(aggregation.globalGuest.orders)],
+    ['Total Sessions', aggregation.dailyRows.reduce((a,b)=>a+b.visitors, 0), '', 'Guest Revenue', ndy(aggregation.globalGuest.revenue, formatCurrency)],
+    ['Total Orders', ndy(aggregation.summary.totalOrders), '', 'Guest Conv %', ndy(aggregation.globalGuest.guestCheckouts > 0 ? aggregation.globalGuest.orders/aggregation.globalGuest.guestCheckouts : 0, formatPercent)],
+    ['Total Revenue', ndy(aggregation.summary.totalRevenue, formatCurrency), '', '', ''],
+    ['GMV', ndy(aggregation.summary.totalRevenue, formatCurrency), '', 'VISITOR METRICS', ''],
+    ['AOV', ndy(aggregation.summary.averageOrderValue, formatCurrency), '', 'Repeat Ratio', ndy(aggregation.executiveSummary.month.repeatRatio, formatPercent)],
+    ['Conversion Rate', ndy(aggregation.summary.overallConversionRate, formatPercent), '', '', '']
+  ]);
 
-  const weeklyHeader = ['Week', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate', 'Top Product', 'Top Traffic Source'];
-  const weeklyValues = [weeklyHeader].concat(aggregation.weeklyRows.map(row => [
-    row.week,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`,
-    row.topProduct,
-    row.topTrafficSource
-  ]));
+  // 2. VISITOR INTELLIGENCE
+  const visitorVals = appendMeta([
+    ['VISITOR INTELLIGENCE'], createEmpty(),
+    ['METRIC', 'Value'],
+    ['New Visitors (All Time)', aggregation.dailyRows.reduce((sum, r) => sum + r.newVisitors, 0)],
+    ['Repeat Visitors', aggregation.dailyRows.reduce((sum, r) => sum + r.repeatVisitors, 0)],
+    ['Average Session Duration', formatMins(aggregation.executiveSummary.month.avgSessionDurationMins)],
+    ['Global Bounce Rate', ndy(aggregation.executiveSummary.month.bounceRate, formatPercent)],
+    createEmpty(), ['TOP EXIT PAGES', 'Exits'],
+    ...aggregation.topExitPages.map(r => [r.page, r.count])
+  ]);
 
-  const monthlyHeader = ['Month', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'];
-  const monthlyValues = [monthlyHeader].concat(aggregation.monthlyRows.map(row => [
-    row.month,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
+  // 3. WHATSAPP ANALYTICS
+  const waVals = appendMeta([
+    ['WHATSAPP CHECKOUT ANALYTICS'], createEmpty(),
+    ['METRIC', 'Value'],
+    ['WhatsApp Button Clicks', ndy(aggregation.leadData.whatsappClicks)],
+    ['OTP Sent', ndy(aggregation.globalGuest.otpSent)],
+    ['OTP Verified', ndy(aggregation.globalGuest.otpVerified)],
+    ['OTP Success %', ndy(aggregation.globalGuest.otpSent > 0 ? aggregation.globalGuest.otpVerified / aggregation.globalGuest.otpSent : 0, formatPercent)],
+    ['Guest Orders', ndy(aggregation.globalGuest.orders)],
+    ['Guest Revenue', ndy(aggregation.globalGuest.revenue, formatCurrency)]
+  ]);
 
-  const trafficValues = [
-    ['Traffic Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['Daily Visitors', aggregation.dailyRows.length ? aggregation.dailyRows[aggregation.dailyRows.length - 1].visitors : 0],
-    ['Weekly Visitors', aggregation.executiveSummary.week.visitors],
-    ['Monthly Visitors', aggregation.executiveSummary.month.visitors],
-    ['New Visitors', aggregation.executiveSummary.today.visitors],
-    ['Repeat Visitors', aggregation.customerMetrics.returningCustomers],
-    ['Average Session Duration', 'N/A'],
-    [],
-    ['Traffic Source', 'Events'],
-    ...aggregation.utmRows.slice(0, 20).map(row => [row.source, row.visitors])
-  ];
+  // 4. PRODUCT ANALYTICS
+  const prodVals = appendMeta([
+    ['PRODUCT ANALYTICS'], createEmpty(),
+    ['TOP PERFORMING PRODUCTS', 'Views', 'Carts', 'Purchases', 'Revenue', 'Conv Rate'],
+    ...aggregation.productRows.slice(0, 20).map(p => [p.productName, p.views, p.carts, p.purchases, formatCurrency(p.revenue), formatPercent(p.views > 0 ? p.purchases/p.views : 0)]),
+    createEmpty(),
+    ['LOW CONVERSION PRODUCTS (High views, low purchases)', 'Views', 'Purchases', 'Conv Rate'],
+    ...aggregation.productRows.filter(p => p.views > 10 && (p.views > 0 ? (p.purchases/p.views) : 0) < 0.02).map(p => [p.productName, p.views, p.purchases, formatPercent(p.views > 0 ? p.purchases/p.views : 0)])
+  ]);
 
-  const productHeaderRow = ['Product Name', 'Product Views', 'Cart Adds', 'Purchases', 'Revenue', 'Conversion Rate'];
-  const productValues = [productHeaderRow].concat(aggregation.productRows.map(row => [
-    row.productName,
-    row.productViews,
-    row.cartAdds,
-    row.purchases,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
+  // 5. CONVERSION FUNNEL
+  const funnelVals = appendMeta([
+    ['CONVERSION FUNNEL'], createEmpty(),
+    ['FUNNEL STAGE', 'Users/Events', 'Drop-off'],
+    ['Page View', aggregation.globalFunnel.pageViews, '-'],
+    ['Product View', aggregation.globalFunnel.productViews, formatPercent(aggregation.globalFunnel.pageViews > 0 ? aggregation.globalFunnel.productViews/aggregation.globalFunnel.pageViews : 0)],
+    ['Add To Cart', aggregation.globalFunnel.addToCarts, formatPercent(aggregation.globalFunnel.productViews > 0 ? aggregation.globalFunnel.addToCarts/aggregation.globalFunnel.productViews : 0)],
+    ['Checkout Started', ndy(aggregation.globalFunnel.checkoutStarted), ndy(aggregation.globalFunnel.addToCarts > 0 ? aggregation.globalFunnel.checkoutStarted/aggregation.globalFunnel.addToCarts : 0, formatPercent)],
+    ['Guest Checkout Started', ndy(aggregation.globalFunnel.guestCheckoutStarted), ndy(aggregation.globalFunnel.checkoutStarted > 0 ? aggregation.globalFunnel.guestCheckoutStarted/aggregation.globalFunnel.checkoutStarted : 0, formatPercent)],
+    ['OTP Sent', ndy(aggregation.globalFunnel.otpSent), ndy(aggregation.globalFunnel.guestCheckoutStarted > 0 ? aggregation.globalFunnel.otpSent/aggregation.globalFunnel.guestCheckoutStarted : 0, formatPercent)],
+    ['OTP Verified', ndy(aggregation.globalFunnel.otpVerified), ndy(aggregation.globalFunnel.otpSent > 0 ? aggregation.globalFunnel.otpVerified/aggregation.globalFunnel.otpSent : 0, formatPercent)],
+    ['Purchase Completed', ndy(aggregation.globalFunnel.purchases), ndy(aggregation.globalFunnel.checkouts > 0 || aggregation.globalFunnel.otpVerified > 0 ? aggregation.globalFunnel.purchases/Math.max(aggregation.globalFunnel.checkoutStarted, aggregation.globalFunnel.otpVerified) : 0, formatPercent)]
+  ]);
 
-  const revenueValues = [
-    ['Revenue Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['GMV', formatCurrency(aggregation.summary.totalRevenue)],
-    ['Total Orders', aggregation.summary.purchases],
-    ['Average Order Value', formatCurrency(aggregation.summary.averageOrderValue)],
-    ['Conversion Rate', `${(aggregation.summary.conversionRate * 100).toFixed(2)}%`]
-  ];
+  // 6. TRAFFIC ANALYTICS
+  const trafficVals = appendMeta([
+    ['TRAFFIC SOURCE ANALYTICS'], createEmpty(),
+    ['Source', 'Visitors', 'Orders', 'Revenue', 'Conv Rate'],
+    ...aggregation.utmRows.map(u => [u.source, u.visitors, u.orders, formatCurrency(u.revenue), formatPercent(u.conversionRate)])
+  ]);
 
-  const customerValues = [
-    ['Customer Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['New Customers', aggregation.customerMetrics.newCustomers],
-    ['Returning Customers', aggregation.customerMetrics.returningCustomers],
-    ['Repeat Buyers', aggregation.customerMetrics.repeatBuyers],
-    ['Total Customers', aggregation.customerMetrics.totalCustomers]
-  ];
+  // 7. TIME BASED REPORTS
+  const reportHeaders = ['Date', 'Visitors', 'New', 'Repeat', 'Orders', 'Revenue', 'AOV', 'Conv Rate', 'Avg Duration (m)', 'Bounce Rate'];
+  const mapReport = r => [r.date, r.visitors, r.newVisitors, r.repeatVisitors, r.orders, formatCurrency(r.revenue), formatCurrency(r.aov), formatPercent(r.purchaseConversionRate), formatMins(r.avgSessionDurationMins), formatPercent(r.bounceRate)];
+  
+  const dailyVals = appendMeta([['DAILY REPORT'], createEmpty(), reportHeaders, ...aggregation.dailyRows.map(mapReport)]);
+  const weeklyVals = appendMeta([['WEEKLY REPORT'], createEmpty(), reportHeaders, ...aggregation.weeklyRows.map(mapReport)]);
+  const monthlyVals = appendMeta([['MONTHLY REPORT'], createEmpty(), reportHeaders, ...aggregation.monthlyRows.map(mapReport)]);
 
-  const marketingHeaderRow = ['Source', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'];
-  const marketingValues = [marketingHeaderRow].concat(aggregation.marketingRows.map(row => [
-    row.source,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
-
-  const leadHeaderRow = ['Date', 'WhatsApp Leads', 'Contact Leads', 'Total Leads'];
-  const leadValues = [leadHeaderRow].concat(aggregation.leadRows.map(row => [
-    row.date,
-    row.whatsappLeads,
-    row.contactLeads,
-    row.totalLeads
-  ]));
-
-  const funnelValues = [
-    ['Stage', 'Count'],
-    ['Visitors', aggregation.funnelMetrics.visitors],
-    ['Product Views', aggregation.funnelMetrics.productViews],
-    ['Add To Cart', aggregation.funnelMetrics.addToCart],
-    ['Checkout Started', aggregation.funnelMetrics.checkoutStarted],
-    ['Purchase Completed', aggregation.funnelMetrics.purchases],
-    ['View → Cart %', aggregation.funnelMetrics.productViews === 0 ? '0%' : `${((aggregation.funnelMetrics.addToCart / aggregation.funnelMetrics.productViews) * 100).toFixed(2)}%`],
-    ['Cart → Checkout %', aggregation.funnelMetrics.addToCart === 0 ? '0%' : `${((aggregation.funnelMetrics.checkoutStarted / aggregation.funnelMetrics.addToCart) * 100).toFixed(2)}%`],
-    ['Checkout → Purchase %', aggregation.funnelMetrics.checkoutStarted === 0 ? '0%' : `${((aggregation.funnelMetrics.purchases / aggregation.funnelMetrics.checkoutStarted) * 100).toFixed(2)}%`],
-    ['Overall Conversion %', aggregation.funnelMetrics.visitors === 0 ? '0%' : `${((aggregation.funnelMetrics.purchases / aggregation.funnelMetrics.visitors) * 100).toFixed(2)}%`]
-  ];
+  // OTHERS
+  const revVals = appendMeta([['REVENUE ANALYTICS'], createEmpty(), reportHeaders, ...aggregation.dailyRows.map(mapReport)]);
+  const custVals = appendMeta([
+    ['CUSTOMER ANALYTICS'], createEmpty(), 
+    ['Customer Type', 'Count', 'Revenue'], 
+    ['New Customers', aggregation.dailyRows.reduce((s, r)=>s+r.newVisitors,0), ''],
+    ['Returning Customers', aggregation.dailyRows.reduce((s, r)=>s+r.repeatVisitors,0), ''],
+    ['Guest Customers', aggregation.globalGuest.orders, formatCurrency(aggregation.globalGuest.revenue)]
+  ]);
+  const leadVals = appendMeta([['LEAD ANALYTICS'], createEmpty(), ['Lead Type', 'Count'], ['Contact Forms', aggregation.leadData.contactForms], ['WhatsApp Clicks', aggregation.leadData.whatsappClicks]]);
 
   const sheetWrites = [
-    { sheet: DASHBOARD_SHEET_TITLE, values: dashboardValues },
-    { sheet: EXECUTIVE_SUMMARY_SHEET_TITLE, values: executiveValues },
-    { sheet: DAILY_REPORT_SHEET_TITLE, values: dailyValues },
-    { sheet: WEEKLY_REPORT_SHEET_TITLE, values: weeklyValues },
-    { sheet: MONTHLY_REPORT_SHEET_TITLE, values: monthlyValues },
-    { sheet: TRAFFIC_ANALYTICS_SHEET_TITLE, values: trafficValues },
-    { sheet: PRODUCT_ANALYTICS_SHEET_TITLE, values: productValues },
-    { sheet: REVENUE_ANALYTICS_SHEET_TITLE, values: revenueValues },
-    { sheet: CUSTOMER_ANALYTICS_SHEET_TITLE, values: customerValues },
-    { sheet: MARKETING_ANALYTICS_SHEET_TITLE, values: marketingValues },
-    { sheet: LEAD_ANALYTICS_SHEET_TITLE, values: leadValues },
-    { sheet: CONVERSION_FUNNEL_SHEET_TITLE, values: funnelValues }
+    { sheet: EXECUTIVE_DASHBOARD_SHEET, values: execVals },
+    { sheet: VISITOR_INTELLIGENCE_SHEET, values: visitorVals },
+    { sheet: TRAFFIC_ANALYTICS_SHEET, values: trafficVals },
+    { sheet: PRODUCT_ANALYTICS_SHEET, values: prodVals },
+    { sheet: REVENUE_ANALYTICS_SHEET, values: revVals },
+    { sheet: CUSTOMER_ANALYTICS_SHEET, values: custVals },
+    { sheet: WHATSAPP_ANALYTICS_SHEET, values: waVals },
+    { sheet: CONVERSION_FUNNEL_SHEET, values: funnelVals },
+    { sheet: DAILY_REPORT_SHEET, values: dailyVals },
+    { sheet: WEEKLY_REPORT_SHEET, values: weeklyVals },
+    { sheet: MONTHLY_REPORT_SHEET, values: monthlyVals },
+    { sheet: LEAD_ANALYTICS_SHEET, values: leadVals }
   ];
 
   for (const sheetWrite of sheetWrites) {
@@ -922,637 +900,73 @@ async function buildDashboardSheets(s) {
     await writeSheetValues(s, sheetWrite.sheet, 'A1', sheetWrite.values);
   }
 
-  const latestSpreadsheet = await getSpreadsheetMetadata(s);
-  const dashboardSheet = findSheetByTitle(latestSpreadsheet, DASHBOARD_SHEET_TITLE);
-  const dailySheet = findSheetByTitle(latestSpreadsheet, DAILY_REPORT_SHEET_TITLE);
-  const productSheet = findSheetByTitle(latestSpreadsheet, PRODUCT_ANALYTICS_SHEET_TITLE);
-  const leadSheet = findSheetByTitle(latestSpreadsheet, LEAD_ANALYTICS_SHEET_TITLE);
-
-  const chartRequests = [];
-  if (dashboardSheet && dailySheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Daily Traffic Trend',
-            basicChart: {
-              chartType: 'LINE',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Date' },
-                { position: 'LEFT_AXIS', title: 'Visitors' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: dailySheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.dailyRows.length + 1, 100),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: dailySheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.dailyRows.length + 1, 100),
-                          startColumnIndex: 1,
-                          endColumnIndex: 2
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: dashboardSheet.properties.sheetId,
-                rowIndex: 10,
-                columnIndex: 0
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
+  console.log('[DASHBOARD] Injecting charts via batchUpdate...');
+  try {
+    const chartRequests = [];
+    
+    // Clear all existing charts in these sheets
+    for (const sh of refreshed.data.sheets) {
+      if (sh.charts && DATA_SHEET_ORDER.includes(sh.properties.title)) {
+        for (const chart of sh.charts) {
+          chartRequests.push({ deleteEmbeddedObject: { objectId: chart.chartId } });
         }
       }
-    });
-  }
+    }
 
-  if (productSheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Revenue by Product',
-            basicChart: {
-              chartType: 'BAR',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Revenue' },
-                { position: 'LEFT_AXIS', title: 'Product' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: productSheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.productRows.length + 1, 20),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: productSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.productRows.length + 1, 20),
-                          startColumnIndex: 4,
-                          endColumnIndex: 5
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'BOTTOM_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: productSheet.properties.sheetId,
-                rowIndex: 1,
-                columnIndex: 7
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
-        }
-      }
-    });
-  }
+    const execId = getSheetId(EXECUTIVE_DASHBOARD_SHEET);
+    const dailyId = getSheetId(DAILY_REPORT_SHEET);
+    const trafficId = getSheetId(TRAFFIC_ANALYTICS_SHEET);
+    const funnelId = getSheetId(CONVERSION_FUNNEL_SHEET);
+    
+    // 1. Executive Dashboard (Revenue Trend)
+    if(execId !== undefined && dailyId !== undefined && aggregation.dailyRows.length > 0) {
+       chartRequests.push(chartBuilder.buildLineChart(execId, 'Revenue Trend (Daily)', 
+          chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 0, 1), // Date
+          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 5, 6)], // Revenue
+          12, 0, 500, 300
+       ));
+       chartRequests.push(chartBuilder.buildLineChart(execId, 'Visitors Trend (Daily)', 
+          chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 0, 1),
+          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 1, 2)], // Visitors
+          12, 5, 500, 300
+       ));
+    }
+    
+    // 2. Traffic Sources (Pie)
+    if(trafficId !== undefined && aggregation.utmRows.length > 0) {
+       chartRequests.push(chartBuilder.buildPieChart(execId, 'Traffic Sources', 
+          chartBuilder.createRange(trafficId, 2, 2 + aggregation.utmRows.length, 0, 1),
+          chartBuilder.createRange(trafficId, 2, 2 + aggregation.utmRows.length, 1, 2),
+          22, 0, 400, 300
+       ));
+    }
 
-  if (leadSheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Lead Trend',
-            basicChart: {
-              chartType: 'COLUMN',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Date' },
-                { position: 'LEFT_AXIS', title: 'Leads' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: leadSheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: leadSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                          startColumnIndex: 1,
-                          endColumnIndex: 2
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                },
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: leadSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                          startColumnIndex: 3,
-                          endColumnIndex: 4
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: leadSheet.properties.sheetId,
-                rowIndex: 1,
-                columnIndex: 6
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
-        }
-      }
-    });
-  }
+    // 3. Conversion Funnel (Bar/Column)
+    if(funnelId !== undefined) {
+       chartRequests.push(chartBuilder.buildColumnChart(funnelId, 'Conversion Funnel', 
+          chartBuilder.createRange(funnelId, 2, 11, 0, 1), // stages
+          [chartBuilder.createRange(funnelId, 2, 11, 1, 2)], // values
+          2, 4, 600, 400
+       ));
+       // Add funnel to exec dashboard too
+       chartRequests.push(chartBuilder.buildColumnChart(execId, 'Conversion Funnel', 
+          chartBuilder.createRange(funnelId, 2, 11, 0, 1),
+          [chartBuilder.createRange(funnelId, 2, 11, 1, 2)],
+          22, 4, 600, 300
+       ));
+    }
 
-  if (chartRequests.length) {
-    await s.spreadsheets.batchUpdate({
-      spreadsheetId: SHEET_ID,
-      requestBody: { requests: chartRequests }
-    });
+    if (chartRequests.length > 0) {
+      await s.spreadsheets.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { requests: chartRequests }
+      });
+      console.log('[DASHBOARD] Charts injected successfully.');
+    }
+  } catch(err) {
+    console.error('[DASHBOARD_CHART_ERROR]', err.message);
   }
 }
-
-async function fetchRawEventRows(s) {
-  const response = await s.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: DEFAULT_RANGE
-  });
-  const values = response.data.values || [];
-  if (values.length === 0) return [];
-
-  const headers = values[0].map(h => normalizeValue(h));
-  return values.slice(1).map(row => {
-    const result = {};
-    headers.forEach((header, index) => {
-      result[header] = row[index] !== undefined ? row[index] : '';
-    });
-    return result;
-  });
-}
-
-async function buildDashboardSheets(s) {
-  const spreadsheet = await getSpreadsheetMetadata(s);
-  await createMissingSheets(s, spreadsheet);
-  await ensureRawEventsSheetExists(s, spreadsheet);
-  const refreshed = await getSpreadsheetMetadata(s);
-  await createMissingSheets(s, refreshed);
-
-  const rows = await fetchRawEventRows(s);
-  const aggregation = buildAggregations(rows);
-
-  const dashboardValues = [
-    ['Dashboard'],
-    [],
-    ['Total Visitors', aggregation.summary.totalVisitors, 'New Visitors', aggregation.executiveSummary.today.visitors, 'Repeat Visitors', Math.max(0, aggregation.summary.totalVisitors - aggregation.executiveSummary.today.visitors)],
-    ['Product Views', aggregation.summary.productViews, 'Add To Cart', aggregation.summary.addToCart, 'Checkout Started', aggregation.summary.checkoutStarted],
-    ['Purchases', aggregation.summary.purchases, 'WhatsApp Leads', aggregation.summary.whatsappLeads, 'Contact Leads', aggregation.summary.contactLeads],
-    ['Revenue', formatCurrency(aggregation.summary.totalRevenue), 'Average Order Value', formatCurrency(aggregation.summary.averageOrderValue), 'Conversion Rate', `${(aggregation.summary.conversionRate * 100).toFixed(2)}%`],
-    []
-  ];
-
-  const executiveValues = [
-    ['Executive Summary'],
-    [],
-    ['Period', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'],
-    ['Today', aggregation.executiveSummary.today.visitors, aggregation.executiveSummary.today.orders, formatCurrency(aggregation.executiveSummary.today.revenue), `${(aggregation.executiveSummary.today.conversionRate * 100).toFixed(2)}%`],
-    ['This Week', aggregation.executiveSummary.week.visitors, aggregation.executiveSummary.week.orders, formatCurrency(aggregation.executiveSummary.week.revenue), `${(aggregation.executiveSummary.week.conversionRate * 100).toFixed(2)}%`],
-    ['This Month', aggregation.executiveSummary.month.visitors, aggregation.executiveSummary.month.orders, formatCurrency(aggregation.executiveSummary.month.revenue), `${(aggregation.executiveSummary.month.conversionRate * 100).toFixed(2)}%`],
-    [],
-    ['Top Insights'],
-    [`Top product this week: ${aggregation.weeklyRows.length ? aggregation.weeklyRows[aggregation.weeklyRows.length - 1].topProduct || 'N/A' : 'N/A'}`],
-    [`WhatsApp generated ${aggregation.summary.whatsappLeads} leads`],
-    [`Repeat visitors this month: ${aggregation.customerMetrics.returningCustomers}`]
-  ];
-
-  const dailyHeader = ['Date', 'Visitors', 'Page Views', 'Product Views', 'Add To Cart', 'Checkouts', 'Purchases', 'WhatsApp Clicks', 'Contact Leads', 'Revenue', 'Conversion Rate', 'Top Product', 'Top Traffic Source'];
-  const dailyValues = [dailyHeader].concat(aggregation.dailyRows.map(row => [
-    row.date,
-    row.visitors,
-    row.pageViews,
-    row.productViews,
-    row.addToCart,
-    row.checkouts,
-    row.purchases,
-    row.whatsappClicks,
-    row.contactLeads,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`,
-    row.topProduct,
-    row.topTrafficSource
-  ]));
-
-  const weeklyHeader = ['Week', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate', 'Top Product', 'Top Traffic Source'];
-  const weeklyValues = [weeklyHeader].concat(aggregation.weeklyRows.map(row => [
-    row.week,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`,
-    row.topProduct,
-    row.topTrafficSource
-  ]));
-
-  const monthlyHeader = ['Month', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'];
-  const monthlyValues = [monthlyHeader].concat(aggregation.monthlyRows.map(row => [
-    row.month,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
-
-  const trafficValues = [
-    ['Traffic Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['Daily Visitors', aggregation.dailyRows.length ? aggregation.dailyRows[aggregation.dailyRows.length - 1].visitors : 0],
-    ['Weekly Visitors', aggregation.executiveSummary.week.visitors],
-    ['Monthly Visitors', aggregation.executiveSummary.month.visitors],
-    ['New Visitors', aggregation.executiveSummary.today.visitors],
-    ['Repeat Visitors', aggregation.customerMetrics.returningCustomers],
-    ['Average Session Duration', 'N/A'],
-    [],
-    ['Traffic Source', 'Events'],
-    ...aggregation.utmRows.slice(0, 20).map(row => [row.source, row.visitors])
-  ];
-
-  const productHeaderRow = ['Product Name', 'Product Views', 'Cart Adds', 'Purchases', 'Revenue', 'Conversion Rate'];
-  const productValues = [productHeaderRow].concat(aggregation.productRows.map(row => [
-    row.productName,
-    row.productViews,
-    row.cartAdds,
-    row.purchases,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
-
-  const revenueValues = [
-    ['Revenue Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['GMV', formatCurrency(aggregation.summary.totalRevenue)],
-    ['Total Orders', aggregation.summary.purchases],
-    ['Average Order Value', formatCurrency(aggregation.summary.averageOrderValue)],
-    ['Conversion Rate', `${(aggregation.summary.conversionRate * 100).toFixed(2)}%`]
-  ];
-
-  const customerValues = [
-    ['Customer Analytics'],
-    [],
-    ['Metric', 'Value'],
-    ['New Customers', aggregation.customerMetrics.newCustomers],
-    ['Returning Customers', aggregation.customerMetrics.returningCustomers],
-    ['Repeat Buyers', aggregation.customerMetrics.repeatBuyers],
-    ['Total Customers', aggregation.customerMetrics.totalCustomers]
-  ];
-
-  const marketingHeaderRow = ['Source', 'Visitors', 'Orders', 'Revenue', 'Conversion Rate'];
-  const marketingValues = [marketingHeaderRow].concat(aggregation.marketingRows.map(row => [
-    row.source,
-    row.visitors,
-    row.orders,
-    formatCurrency(row.revenue),
-    `${(row.conversionRate * 100).toFixed(2)}%`
-  ]));
-
-  const leadHeaderRow = ['Date', 'WhatsApp Leads', 'Contact Leads', 'Total Leads'];
-  const leadValues = [leadHeaderRow].concat(aggregation.leadRows.map(row => [
-    row.date,
-    row.whatsappLeads,
-    row.contactLeads,
-    row.totalLeads
-  ]));
-
-  const funnelValues = [
-    ['Stage', 'Count'],
-    ['Visitors', aggregation.funnelMetrics.visitors],
-    ['Product Views', aggregation.funnelMetrics.productViews],
-    ['Add To Cart', aggregation.funnelMetrics.addToCart],
-    ['Checkout Started', aggregation.funnelMetrics.checkoutStarted],
-    ['Purchase Completed', aggregation.funnelMetrics.purchases],
-    ['View → Cart %', aggregation.funnelMetrics.productViews === 0 ? '0%' : `${((aggregation.funnelMetrics.addToCart / aggregation.funnelMetrics.productViews) * 100).toFixed(2)}%`],
-    ['Cart → Checkout %', aggregation.funnelMetrics.addToCart === 0 ? '0%' : `${((aggregation.funnelMetrics.checkoutStarted / aggregation.funnelMetrics.addToCart) * 100).toFixed(2)}%`],
-    ['Checkout → Purchase %', aggregation.funnelMetrics.checkoutStarted === 0 ? '0%' : `${((aggregation.funnelMetrics.purchases / aggregation.funnelMetrics.checkoutStarted) * 100).toFixed(2)}%`],
-    ['Overall Conversion %', aggregation.funnelMetrics.visitors === 0 ? '0%' : `${((aggregation.funnelMetrics.purchases / aggregation.funnelMetrics.visitors) * 100).toFixed(2)}%`]
-  ];
-
-  const sheetWrites = [
-    { sheet: DASHBOARD_SHEET_TITLE, values: dashboardValues },
-    { sheet: EXECUTIVE_SUMMARY_SHEET_TITLE, values: executiveValues },
-    { sheet: DAILY_REPORT_SHEET_TITLE, values: dailyValues },
-    { sheet: WEEKLY_REPORT_SHEET_TITLE, values: weeklyValues },
-    { sheet: MONTHLY_REPORT_SHEET_TITLE, values: monthlyValues },
-    { sheet: TRAFFIC_ANALYTICS_SHEET_TITLE, values: trafficValues },
-    { sheet: PRODUCT_ANALYTICS_SHEET_TITLE, values: productValues },
-    { sheet: REVENUE_ANALYTICS_SHEET_TITLE, values: revenueValues },
-    { sheet: CUSTOMER_ANALYTICS_SHEET_TITLE, values: customerValues },
-    { sheet: MARKETING_ANALYTICS_SHEET_TITLE, values: marketingValues },
-    { sheet: LEAD_ANALYTICS_SHEET_TITLE, values: leadValues },
-    { sheet: CONVERSION_FUNNEL_SHEET_TITLE, values: funnelValues }
-  ];
-
-  for (const sheetWrite of sheetWrites) {
-    await clearSheet(s, sheetWrite.sheet);
-    await writeSheetValues(s, sheetWrite.sheet, 'A1', sheetWrite.values);
-  }
-
-  const latestSpreadsheet = await getSpreadsheetMetadata(s);
-  const dashboardSheet = findSheetByTitle(latestSpreadsheet, DASHBOARD_SHEET_TITLE);
-  const dailySheet = findSheetByTitle(latestSpreadsheet, DAILY_REPORT_SHEET_TITLE);
-  const productSheet = findSheetByTitle(latestSpreadsheet, PRODUCT_ANALYTICS_SHEET_TITLE);
-  const leadSheet = findSheetByTitle(latestSpreadsheet, LEAD_ANALYTICS_SHEET_TITLE);
-
-  const chartRequests = [];
-  if (dashboardSheet && dailySheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Daily Traffic Trend',
-            basicChart: {
-              chartType: 'LINE',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Date' },
-                { position: 'LEFT_AXIS', title: 'Visitors' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: dailySheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.dailyRows.length + 1, 100),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: dailySheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.dailyRows.length + 1, 100),
-                          startColumnIndex: 1,
-                          endColumnIndex: 2
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: dashboardSheet.properties.sheetId,
-                rowIndex: 10,
-                columnIndex: 0
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
-        }
-      }
-    });
-  }
-
-  if (productSheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Revenue by Product',
-            basicChart: {
-              chartType: 'BAR',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Revenue' },
-                { position: 'LEFT_AXIS', title: 'Product' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: productSheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.productRows.length + 1, 20),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: productSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.productRows.length + 1, 20),
-                          startColumnIndex: 4,
-                          endColumnIndex: 5
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'BOTTOM_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: productSheet.properties.sheetId,
-                rowIndex: 1,
-                columnIndex: 7
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
-        }
-      }
-    });
-  }
-
-  if (leadSheet) {
-    chartRequests.push({
-      addChart: {
-        chart: {
-          spec: {
-            title: 'Lead Trend',
-            basicChart: {
-              chartType: 'COLUMN',
-              legendPosition: 'BOTTOM_LEGEND',
-              axis: [
-                { position: 'BOTTOM_AXIS', title: 'Date' },
-                { position: 'LEFT_AXIS', title: 'Leads' }
-              ],
-              domains: [
-                {
-                  sourceRange: {
-                    sources: [
-                      {
-                        sheetId: leadSheet.properties.sheetId,
-                        startRowIndex: 1,
-                        endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                        startColumnIndex: 0,
-                        endColumnIndex: 1
-                      }
-                    ]
-                  }
-                }
-              ],
-              series: [
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: leadSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                          startColumnIndex: 1,
-                          endColumnIndex: 2
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                },
-                {
-                  series: {
-                    sourceRange: {
-                      sources: [
-                        {
-                          sheetId: leadSheet.properties.sheetId,
-                          startRowIndex: 1,
-                          endRowIndex: Math.min(aggregation.leadRows.length + 1, 50),
-                          startColumnIndex: 3,
-                          endColumnIndex: 4
-                        }
-                      ]
-                    }
-                  },
-                  targetAxis: 'LEFT_AXIS'
-                }
-              ]
-            }
-          },
-          position: {
-            overlayPosition: {
-              anchorCell: {
-                sheetId: leadSheet.properties.sheetId,
-                rowIndex: 1,
-                columnIndex: 6
-              },
-              widthPixels: 700,
-              heightPixels: 320
-            }
-          }
-        }
-      }
-    });
-  }
-
-  if (chartRequests.length) {
-    await s.spreadsheets.batchUpdate({
-      spreadsheetId: SHEET_ID,
-      requestBody: { requests: chartRequests }
-    });
-  }
-}
-
-
 async function populateDashboardSheet(s) {
   await buildDashboardSheets(s);
 }
@@ -1698,7 +1112,202 @@ exports.diagnosticTest = async () => {
     // Step 4: Check for Raw Events sheet
     console.log('[DIAG] Step 4: Looking for Raw Events sheet...');
     const eventSheet = spreadsheet.data.sheets.find(
-      sh => sh.properties.title === RAW_EVENTS_SHEET_TITLE || sh.properties.title.toLowerCase() === RAW_EVENTS_SHEET_TITLE.toLowerCase() || sh.properties.title.toLowerCase() === 'analytics'
+      sh => sh.properties.title === RAW_EVENTS_SHEET_TITLE || DATA_SHEET_ORDER.includes(sh.properties.title)
+    );
+    if (!eventSheet) {
+      results.steps.push({
+        name: 'raw_events_sheet_check',
+        status: 'WARNING',
+        details: { availableSheets: spreadsheet.data.sheets.map(sh => sh.properties.title), message: 'Raw Events sheet missing, attempting to create it.' }
+      });
+      await ensureAnalyticsSheetExists(s, spreadsheet);
+      results.steps.push({
+        name: 'raw_events_sheet_check',
+        status: 'PASSED',
+        details: { message: 'Raw Events sheet created successfully.' }
+      });
+    } else {
+      results.steps.push({
+        name: 'raw_events_sheet_check',
+        status: 'PASSED',
+        details: {
+          title: eventSheet.properties.title,
+          sheetId: eventSheet.properties.sheetId,
+          gridProperties: eventSheet.properties.gridProperties
+        }
+      });
+    }
+
+    // Step 5: Read headers from Raw Events sheet
+    console.log('[DIAG] Step 5: Reading headers...');
+    const headers = await s.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${RAW_EVENTS_SHEET_TITLE}!A1:W1`
+    });
+    results.steps.push({
+      name: 'read_headers',
+      status: 'PASSED',
+      details: {
+        headerRow: headers.data.values ? headers.data.values[0] : 'NO HEADERS FOUND'
+      }
+    });
+
+    // Step 6: Try to append a test row
+    console.log('[DIAG] Step 6: Testing row append...');
+    const testRow = [
+      new Date().toISOString(),
+      'diagnostic_test',
+      '/diagnostic',
+      '',
+      'Test Browser',
+      'Test Device',
+      '',
+      '',
+      'DIAG_' + Date.now(),
+      'DIAG_VISITOR',
+      '',
+      '',
+      '',
+      '',
+      'Diagnostic Product',
+      'Diagnostics',
+      0,
+      0,
+      '',
+      0,
+      '',
+      0,
+      ''
+    ];
+    const appendResult = await s.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: `${RAW_EVENTS_SHEET_TITLE}!A:W`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [testRow] }
+    });
+    results.steps.push({
+      name: 'append_test_row',
+      status: 'PASSED',
+      details: {
+        updatedRows: appendResult.data.updates.updatedRows,
+        appendedCell: appendResult.data.updates.updatedRange
+      }
+    });
+
+    results.success = true;
+    console.log('[DIAG] ✅ All diagnostic tests passed');
+  } catch (err) {
+    console.error('[DIAG] ❌ Diagnostic test failed:', err.message);
+    results.errors.push(err.message);
+    if (err.response && err.response.data) {
+      results.lastError = err.response.data;
+    } else {
+      results.lastError = {
+        message: err.message,
+        code: err.code
+      };
+    }
+    console.error('[GOOGLE_APPEND_ERROR_STACK]:', err.stack);
+    console.error('[GOOGLE_APPEND_ERROR_FULL]:', err);
+    throw err;
+  }
+};
+
+exports.appendEventRows = async (payloads) => {
+  try {
+    console.log('[GOOGLE_BATCH] Starting appendEventRows with', payloads.length, 'rows');
+    
+    const rows = payloads.map(mapPayloadToRow);
+    console.log('[GOOGLE_BATCH] Mapped rows:', rows);
+
+    console.log('[GOOGLE_BATCH] Getting Sheets API instance...');
+    const s = await sheets();
+    console.log('[GOOGLE_BATCH] Got Sheets API instance');
+    await ensureAnalyticsSheetExists(s);
+
+    console.log('[GOOGLE_BATCH] Sending append request...');
+    const response = await s.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: DEFAULT_RANGE,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: rows }
+    });
+
+    console.log('[GOOGLE_BATCH_SUCCESS] Batch appended:', response.data);
+    return response;
+  } catch (err) {
+    console.error('[GOOGLE_BATCH_ERROR] Failed to append batch:', err.message);
+    console.error('[GOOGLE_BATCH_ERROR_STACK]:', err.stack);
+    throw err;
+  }
+};
+
+/**
+ * Diagnostic test: Validates Google authentication, spreadsheet access, and sheet existence
+ * Returns detailed status and error information
+ */
+exports.diagnosticTest = async () => {
+  const results = {
+    success: false,
+    steps: [],
+    errors: []
+  };
+
+  try {
+    // Step 1: Check credentials
+    console.log('[DIAG] Step 1: Checking credentials...');
+    if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
+      results.errors.push('Missing credentials');
+      results.steps.push({
+        name: 'credentials_check',
+        status: 'FAILED',
+        details: { hasSheetId: !!SHEET_ID, hasClientEmail: !!CLIENT_EMAIL, hasPrivateKey: !!PRIVATE_KEY }
+      });
+      return results;
+    }
+    results.steps.push({
+      name: 'credentials_check',
+      status: 'PASSED',
+      details: {
+        sheetId: SHEET_ID,
+        clientEmail: CLIENT_EMAIL,
+        keyLength: PRIVATE_KEY.length
+      }
+    });
+
+    // Step 2: Authenticate
+    console.log('[DIAG] Step 2: Authenticating with Google...');
+    const s = await sheets();
+    results.steps.push({
+      name: 'authentication',
+      status: 'PASSED',
+      details: { message: 'JWT authorized successfully' }
+    });
+
+    // Step 3: Get spreadsheet metadata
+    console.log('[DIAG] Step 3: Getting spreadsheet metadata...');
+    const spreadsheet = await s.spreadsheets.get({
+      spreadsheetId: SHEET_ID
+    });
+    results.steps.push({
+      name: 'spreadsheet_metadata',
+      status: 'PASSED',
+      details: {
+        title: spreadsheet.data.properties.title,
+        id: spreadsheet.data.spreadsheetId,
+        sheetCount: spreadsheet.data.sheets.length,
+        sheets: spreadsheet.data.sheets.map(sh => sh.properties.title),
+        sheet_shared: true,
+        service_account: CLIENT_EMAIL
+      }
+    });
+
+    // Step 4: Check for Raw Events sheet
+    console.log('[DIAG] Step 4: Looking for Raw Events sheet...');
+    const eventSheet = spreadsheet.data.sheets.find(
+      sh => sh.properties.title === RAW_EVENTS_SHEET_TITLE || DATA_SHEET_ORDER.includes(sh.properties.title)
     );
     if (!eventSheet) {
       results.steps.push({
@@ -1798,3 +1407,8 @@ exports.diagnosticTest = async () => {
 
   return results;
 };
+
+// Exports for testing
+exports.fetchRawEventRows = fetchRawEventRows;
+exports.buildAggregations = buildAggregations;
+exports.sheets = sheets;

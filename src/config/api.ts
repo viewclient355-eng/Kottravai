@@ -8,15 +8,7 @@ export const normalizeUrl = (url: string) => {
     return url.replace(/([^:]\/)\/+/g, "$1");
 };
 
-// Base Origin from Environment (Primary: VITE_API_URL, Fallback: Localhost)
 let rawApiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-// Defensive hotfix: Auto-correct port 5001 to 5000 in local dev environment to prevent offline DB states
-if (rawApiUrl.includes("localhost:5001")) {
-    rawApiUrl = rawApiUrl.replace("localhost:5001", "localhost:5000");
-} else if (rawApiUrl.includes("127.0.0.1:5001")) {
-    rawApiUrl = rawApiUrl.replace("127.0.0.1:5001", "127.0.0.1:5000");
-}
 
 export const API_BASE = rawApiUrl.replace(/\/api$/, "");
 

@@ -217,7 +217,7 @@ const ProductDetails = () => {
             });
         }
         window.scrollTo(0, 0);
-    }, [slug]);
+    }, [product?.id]); // Run when product ID changes, meaning a product was loaded
 
     // Track Time Spent on Product Page
     useEffect(() => {

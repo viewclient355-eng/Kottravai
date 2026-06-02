@@ -58,7 +58,7 @@ const sendWhatsAppOTP = async (mobile, otp, type = 'signup') => {
                     }
                 ]
             }
-        });
+        }, { timeout: 3000 }); // Hard 3-second timeout so the frontend doesn't hang
 
         console.log('✅ ASKEVA WhatsApp OTP sent successfully:', response.data);
         return { success: true, data: response.data };
@@ -105,7 +105,7 @@ const sendWhatsAppMessage = async (phone, message) => {
             "text": {
                 "body": message
             }
-        });
+        }, { timeout: 3000 });
 
         console.log('✅ WhatsApp message sent:', response.data);
         return { success: true, data: response.data };
@@ -166,7 +166,7 @@ const sendWhatsAppOrderConfirmation = async (phone, orderId, customerName) => {
                     }
                 ]
             }
-        });
+        }, { timeout: 3000 });
 
         console.log(`✅ ASKEVA Order Confirmation sent to ${sanitized}:`, response.data);
         return { success: true, data: response.data };

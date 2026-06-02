@@ -1,27 +1,24 @@
-require('dotenv').config();
-const { query } = require('./db');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const db = require('./db');
 
-async function checkProducts() {
+async function testDB() {
     try {
-        console.log("--- Checking Products Table ---");
-        const res = await query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'products'");
-        console.log("Columns:", res.rows.map(r => `${r.column_name} (${r.data_type})`).join(', '));
-
-        // Let's see if hub column exists
-        const hubExists = res.rows.some(r => r.column_name === 'hub');
-        if (!hubExists) {
-            console.log("❌ 'hub' column does NOT exist in 'products' table.");
-        } else {
-            const products = await query("SELECT id, name, hub FROM products LIMIT 5");
-            console.log("Sample Products Hubs:", products.rows);
-
-            const hubCount = await query("SELECT hub, count(*) FROM products GROUP BY hub");
-            console.log("Hub Counts:", hubCount.rows);
-        }
-
-    } catch (err) {
-        console.error("❌ Error checking products:", err.message);
+        console.log("Querying products...");
+        const res1 = await db.query('SELECT * FROM products ORDER BY id ASC LIMIT 5');
+        console.log("Products rows:", res1.rows.length);
+    } catch (e) {
+        console.error("Products error:", e.message);
     }
-}
 
-checkProducts();
+    try {
+        console.log("Querying orders...");
+        const res2 = await db.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 5');
+        console.log("Orders rows:", res2.rows.length);
+    } catch (e) {
+        console.error("Orders error:", e.message);
+    }
+    
+    process.exit(0);
+}
+testDB();
