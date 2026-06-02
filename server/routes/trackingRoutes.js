@@ -59,7 +59,10 @@ router.get('/dashboard/update', async (req, res) => {
   }
 });
 
-// Health
-router.get('/health', (req, res) => res.json({ status: 'ok', service: 'tracking' }));
+// Diagnostics
+router.get('/health', trackingController.health);
+router.get('/config', trackingController.config);
+router.get('/last-write', trackingController.lastWrite);
+router.post('/test-write', trackingController.testWrite);
 
 module.exports = router;

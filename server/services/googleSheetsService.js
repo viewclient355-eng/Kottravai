@@ -9,6 +9,30 @@ let PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
 // Log credential status at startup with detailed validation
 console.log('[GOOGLE_INIT] Checking credentials...');
 
+let lastSuccessfulWrite = null;
+
+exports.getLastWrite = () => lastSuccessfulWrite;
+exports.getConfig = () => ({
+    analyticsMode: process.env.ANALYTICS_MODE || 'legacy',
+    spreadsheetId: SHEET_ID,
+    spreadsheetUrl: SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit` : null,
+    rawEventsSheet: 'Raw Events',
+    dashboardSheets: [
+        'Executive Dashboard',
+        'Visitor Intelligence',
+        'Traffic Analytics',
+        'Product Analytics',
+        'Revenue Analytics',
+        'Customer Analytics',
+        'WhatsApp Analytics',
+        'Conversion Funnel',
+        'Daily Report',
+        'Weekly Report',
+        'Monthly Report',
+        'Lead Analytics'
+    ]
+});
+
 // Clean CLIENT_EMAIL - remove leading/trailing spaces and quotes
 if (CLIENT_EMAIL) {
   const originalEmail = CLIENT_EMAIL;
@@ -999,6 +1023,8 @@ exports.appendEventRow = async (payload) => {
     console.log('[GOOGLE_APPEND] Range:', DEFAULT_RANGE);
     console.log('[GOOGLE_APPEND] Sending append request...');
 
+    console.log(`\n==================================================\nGOOGLE SHEETS WRITE ATTEMPT\n===========================\nSpreadsheet ID: ${SHEET_ID}\nSpreadsheet URL: https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit\nTarget Sheet: ${RAW_EVENTS_SHEET_TITLE}\nEvent Type: ${payload.event_type}\nVisitor ID: ${payload.visitor_id || 'N/A'}\nSession ID: ${payload.session_id || 'N/A'}\n========================\n`);
+
     const response = await s.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: DEFAULT_RANGE,
@@ -1008,6 +1034,18 @@ exports.appendEventRow = async (payload) => {
     });
 
     console.log('[GOOGLE_APPEND_SUCCESS] Row appended:', response.data);
+
+    console.log(`\n==================================================\nRAW EVENT WRITTEN\n=================\nSpreadsheet ID: ${SHEET_ID}\nTarget Sheet: ${RAW_EVENTS_SHEET_TITLE}\nRow Number: ${response?.data?.updates?.updatedRange || 'Unknown'}\n=====================================\n`);
+    
+    lastSuccessfulWrite = {
+        timestamp: new Date().toISOString(),
+        eventType: payload.event_type,
+        visitorId: payload.visitor_id || 'N/A',
+        sessionId: payload.session_id || 'N/A',
+        spreadsheetId: SHEET_ID,
+        sheetName: RAW_EVENTS_SHEET_TITLE
+    };
+
     return response;
   } catch (err) {
     console.error('[GOOGLE_APPEND_ERROR] Failed to append row:', err.message);
@@ -1032,6 +1070,8 @@ exports.appendEventRows = async (payloads) => {
     await ensureAnalyticsSheetExists(s);
 
     console.log('[GOOGLE_BATCH] Sending append request...');
+    
+    console.log(`\n==================================================\nGOOGLE SHEETS WRITE ATTEMPT\n===========================\nSpreadsheet ID: ${SHEET_ID}\nSpreadsheet URL: https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit\nTarget Sheet: ${RAW_EVENTS_SHEET_TITLE}\nEvent Type: BATCH (${payloads.length} events)\nVisitor ID: N/A\nSession ID: N/A\n========================\n`);
     const response = await s.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: DEFAULT_RANGE,
@@ -1041,6 +1081,18 @@ exports.appendEventRows = async (payloads) => {
     });
 
     console.log('[GOOGLE_BATCH_SUCCESS] Batch appended:', response.data);
+
+    console.log(`\n==================================================\nRAW EVENT WRITTEN\n=================\nSpreadsheet ID: ${SHEET_ID}\nTarget Sheet: ${RAW_EVENTS_SHEET_TITLE}\nRow Number: ${response?.data?.updates?.updatedRange || 'Unknown'} (Batch of ${payloads.length})\n=====================================\n`);
+    
+    lastSuccessfulWrite = {
+        timestamp: new Date().toISOString(),
+        eventType: `BATCH_OF_${payloads.length}`,
+        visitorId: 'N/A',
+        sessionId: 'N/A',
+        spreadsheetId: SHEET_ID,
+        sheetName: RAW_EVENTS_SHEET_TITLE
+    };
+
     return response;
   } catch (err) {
     console.error('[GOOGLE_BATCH_ERROR] Failed to append batch:', err.message);

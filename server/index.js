@@ -3588,10 +3588,35 @@ if (require.main === module) {
             }
         });
 
-        const server = app.listen(port, () => {
+        const server = app.listen(port, async () => {
             console.log(`✅ Server running on port ${port}`);
-            console.log(`ANALYTICS_MODE=${process.env.ANALYTICS_MODE || 'legacy'}`);
-            console.log(`Tracking Target=${(process.env.ANALYTICS_MODE === 'raw_events') ? 'Raw Events' : 'Legacy Webhook'}`);
+            
+            const googleSheetsService = require('./services/googleSheetsService');
+            try {
+                const diag = await googleSheetsService.diagnosticTest();
+                const metadataStep = diag.steps.find(s => s.name === 'spreadsheet_metadata');
+                const rawEventsStep = diag.steps.find(s => s.name === 'raw_events_sheet_check');
+                const spreadsheetId = process.env.GOOGLE_SHEET_ID || 'MISSING';
+                const spreadsheetUrl = spreadsheetId !== 'MISSING' ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` : 'N/A';
+                
+                console.log('\n==================================================');
+                console.log('Analytics Startup Validation');
+                console.log('==================================================');
+                console.log(`ANALYTICS_MODE=${process.env.ANALYTICS_MODE || 'legacy'}`);
+                console.log(`Google Sheet Connected=${diag.steps.find(s=>s.name==='authentication')?.status === 'PASSED'}`);
+                console.log(`Spreadsheet ID=${spreadsheetId}`);
+                console.log(`Spreadsheet URL=${spreadsheetUrl}`);
+                console.log(`Raw Events Sheet Found=${rawEventsStep?.status === 'PASSED' || rawEventsStep?.status === 'WARNING'}`);
+                console.log(`Dashboard Sheets Found=${metadataStep?.details?.sheetCount >= 10}`);
+                console.log('==================================================\n');
+            } catch(e) {
+                console.log('\n==================================================');
+                console.log('Analytics Startup Validation');
+                console.log('==================================================');
+                console.log(`ANALYTICS_MODE=${process.env.ANALYTICS_MODE || 'legacy'}`);
+                console.log(`Google Sheet Connected=false (${e.message})`);
+                console.log('==================================================\n');
+            }
         });
 
         server.on('error', (err) => {
