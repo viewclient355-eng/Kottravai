@@ -483,6 +483,8 @@ function buildAggregations(rows) {
   const exitPages = new Map();
   const utmSources = new Map();
   
+  let totalProductViewsDetected = 0;
+  
   const globalFunnel = {
     pageViews: 0,
     productViews: 0,
@@ -516,7 +518,7 @@ function buildAggregations(rows) {
 
     const visitorId = row['visitor_id'];
     const sessionId = row['session_id'];
-    const eventType = row['event_type'];
+    const eventType = String(row['event_type'] || '').trim().toLowerCase();
     const revenue = getSafeNumber(row['order_total']);
     const productId = row['product_id'];
     const productName = row['product_name'];
@@ -581,7 +583,10 @@ function buildAggregations(rows) {
         products.set(pKey, { productName: productName || productId, views: 0, carts: 0, purchases: 0, revenue: 0 });
       }
       const p = products.get(pKey);
-      if (eventType === 'product_view') p.views++;
+      if (eventType === 'product_view') {
+        p.views++;
+        totalProductViewsDetected++;
+      }
       if (eventType === 'add_to_cart') p.carts++;
       if (eventType === 'purchase_completed') {
         p.purchases++;
@@ -739,6 +744,8 @@ function buildAggregations(rows) {
   };
 
   return {
+    totalProductViewsDetected,
+    totalProductsAggregated: products.size,
     dailyRows,
     weeklyRows,
     monthlyRows,
@@ -860,10 +867,10 @@ async function buildDashboardSheets(s) {
   const prodVals = appendMeta([
     ['PRODUCT ANALYTICS'], createEmpty(),
     ['TOP PERFORMING PRODUCTS', 'Views', 'Carts', 'Purchases', 'Revenue', 'Conv Rate'],
-    ...aggregation.productRows.slice(0, 20).map(p => [p.productName, p.views, p.carts, p.purchases, formatCurrency(p.revenue), formatPercent(p.views > 0 ? p.purchases/p.views : 0)]),
+    ...aggregation.productRows.slice(0, 100).map(p => [p.productName, p.views, p.carts, p.purchases, formatCurrency(p.revenue), formatPercent(p.views > 0 ? p.purchases/p.views : 0)]),
     createEmpty(),
     ['LOW CONVERSION PRODUCTS (High views, low purchases)', 'Views', 'Purchases', 'Conv Rate'],
-    ...aggregation.productRows.filter(p => p.views > 10 && (p.views > 0 ? (p.purchases/p.views) : 0) < 0.02).map(p => [p.productName, p.views, p.purchases, formatPercent(p.views > 0 ? p.purchases/p.views : 0)])
+    ...aggregation.productRows.filter(p => (p.views > 0 ? (p.purchases/p.views) : 0) < 0.02).slice(0, 100).map(p => [p.productName, p.views, p.purchases, formatPercent(p.views > 0 ? p.purchases/p.views : 0)])
   ]);
 
   // 5. CONVERSION FUNNEL
@@ -939,6 +946,8 @@ async function buildDashboardSheets(s) {
     }
   });
 
+  console.log(`[RAW_EVENTS_PRODUCT_VIEWS_DETECTED] ${aggregation.totalProductViewsDetected}`);
+  console.log(`[PRODUCTS_AGGREGATED] ${aggregation.totalProductsAggregated}`);
   console.log(`[PRODUCT_ANALYTICS_ROWS_WRITTEN] ${prodVals.length}`);
   console.log(`[PAGE_METRICS_ROWS_WRITTEN] 0 (OBSOLETE SHEET)`);
   console.log(`[REVENUE_ROWS_WRITTEN] ${revVals.length}`);
