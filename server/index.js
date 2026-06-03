@@ -939,7 +939,7 @@ app.get('/api/location/pincode/:pincode', async (req, res) => {
 // Analytics tracking: prefer to mount the tracking router if available, otherwise provide a safe fallback
 try {
     // Import tracking router
-    const trackingRoutes = require('./routes/tracking');
+    const trackingRoutes = require('./routes/trackingRoutes');
     app.use('/api/track', trackingRoutes);
 
     // Import daily email sender and setup endpoints
