@@ -826,84 +826,84 @@ async function buildDashboardSheets(s) {
     return vals;
   };
 
+  // Helper for Status Indicators
+  const getStatus = (metric, good, ok) => {
+    if (metric >= good) return '🟢 Healthy';
+    if (metric >= ok) return '🟡 Attention Needed';
+    return '🔴 Critical';
+  };
+
   // 1. EXECUTIVE DASHBOARD
   const execVals = appendMeta([
-    ['EXECUTIVE DASHBOARD - PERFORMANCE SUMMARY'], createEmpty(),
-    ['KEY PERFORMANCE INDICATORS', 'Current Period', '', 'GUEST METRICS', 'Current Period'],
-    ['Total Visitors', aggregation.summary.totalVisitors, '', 'Guest Orders', ndy(aggregation.globalGuest.orders)],
-    ['Total Sessions', aggregation.dailyRows.reduce((a,b)=>a+b.visitors, 0), '', 'Guest Revenue', ndy(aggregation.globalGuest.revenue, formatCurrency)],
-    ['Total Orders', ndy(aggregation.summary.totalOrders), '', 'Guest Conv %', ndy(aggregation.globalGuest.guestCheckouts > 0 ? aggregation.globalGuest.orders/aggregation.globalGuest.guestCheckouts : 0, formatPercent)],
-    ['Total Revenue', ndy(aggregation.summary.totalRevenue, formatCurrency), '', '', ''],
-    ['GMV', ndy(aggregation.summary.totalRevenue, formatCurrency), '', 'VISITOR METRICS', ''],
-    ['AOV', ndy(aggregation.summary.averageOrderValue, formatCurrency), '', 'Repeat Ratio', ndy(aggregation.executiveSummary.month.repeatRatio, formatPercent)],
-    ['Conversion Rate', ndy(aggregation.summary.overallConversionRate, formatPercent), '', '', '']
+    ['KOTTRAVAI EXECUTIVE DASHBOARD'], createEmpty(),
+    ['KPI', 'Value', 'Status'],
+    ['Total Visitors', aggregation.summary.totalVisitors, getStatus(aggregation.summary.totalVisitors, 1000, 100)],
+    ['Total Sessions', aggregation.summary.totalSessions, getStatus(aggregation.summary.totalSessions, 1000, 100)],
+    ['Product Views', aggregation.globalFunnel.productViews, getStatus(aggregation.globalFunnel.productViews, 500, 50)],
+    ['Add To Cart Events', aggregation.globalFunnel.addToCarts, getStatus(aggregation.globalFunnel.addToCarts, 100, 10)],
+    ['Conversion Rate', ndy(aggregation.summary.overallConversionRate, formatPercent), getStatus(aggregation.summary.overallConversionRate, 0.02, 0.005)],
+    ['Orders', ndy(aggregation.summary.totalOrders), getStatus(aggregation.summary.totalOrders, 10, 1)],
+    ['Revenue', ndy(aggregation.summary.totalRevenue, formatCurrency), getStatus(aggregation.summary.totalRevenue, 10000, 1000)],
+    ['Average Order Value', ndy(aggregation.summary.averageOrderValue, formatCurrency), getStatus(aggregation.summary.averageOrderValue, 1000, 500)],
+    createEmpty()
   ]);
 
-  // 2. VISITOR INTELLIGENCE
-  const visitorVals = appendMeta([
-    ['VISITOR INTELLIGENCE'], createEmpty(),
-    ['METRIC', 'Value'],
-    ['New Visitors (All Time)', aggregation.dailyRows.reduce((sum, r) => sum + r.newVisitors, 0)],
-    ['Repeat Visitors', aggregation.dailyRows.reduce((sum, r) => sum + r.repeatVisitors, 0)],
-    ['Average Session Duration', formatMins(aggregation.executiveSummary.month.avgSessionDurationMins)],
-    ['Global Bounce Rate', ndy(aggregation.executiveSummary.month.bounceRate, formatPercent)],
-    createEmpty(), ['TOP EXIT PAGES', 'Exits'],
-    ...aggregation.topExitPages.map(r => [r.page, r.count])
-  ]);
+  // Category aggregation helper
+  const categoryStats = new Map();
+  rows.forEach(row => {
+    const cat = row['category'];
+    if (!cat) return;
+    if (!categoryStats.has(cat)) categoryStats.set(cat, { views: 0, revenue: 0, purchases: 0 });
+    const c = categoryStats.get(cat);
+    if (row['event_type'] === 'product_view' || row['event_type'] === 'Product View') c.views++;
+    if (row['event_type'] === 'purchase_completed' || row['event_type'] === 'Purchase Completed') {
+      c.purchases++;
+      c.revenue += getSafeNumber(row['order_total']);
+    }
+  });
+  const catRows = Array.from(categoryStats.entries()).sort((a,b) => b[1].revenue - a[1].revenue);
 
-  // 3. WHATSAPP ANALYTICS
-  const waVals = appendMeta([
-    ['WHATSAPP CHECKOUT ANALYTICS'], createEmpty(),
-    ['METRIC', 'Value'],
-    ['WhatsApp Button Clicks', ndy(aggregation.leadData.whatsappClicks)],
-    ['OTP Sent', ndy(aggregation.globalGuest.otpSent)],
-    ['OTP Verified', ndy(aggregation.globalGuest.otpVerified)],
-    ['OTP Success %', ndy(aggregation.globalGuest.otpSent > 0 ? aggregation.globalGuest.otpVerified / aggregation.globalGuest.otpSent : 0, formatPercent)],
-    ['Guest Orders', ndy(aggregation.globalGuest.orders)],
-    ['Guest Revenue', ndy(aggregation.globalGuest.revenue, formatCurrency)]
-  ]);
-
-  // 4. PRODUCT ANALYTICS
+  // 2. PRODUCT ANALYTICS
   const prodVals = appendMeta([
     ['PRODUCT ANALYTICS'], createEmpty(),
-    ['TOP PERFORMING PRODUCTS', 'Views', 'Carts', 'Purchases', 'Revenue', 'Conv Rate'],
+    ['TOP PRODUCTS', 'Views', 'Add To Cart', 'Purchases', 'Revenue', 'Conv Rate'],
     ...aggregation.productRows.slice(0, 100).map(p => [p.productName, p.views, p.carts, p.purchases, formatCurrency(p.revenue), formatPercent(p.views > 0 ? p.purchases/p.views : 0)]),
     createEmpty(),
-    ['LOW CONVERSION PRODUCTS (High views, low purchases)', 'Views', 'Purchases', 'Conv Rate'],
-    ...aggregation.productRows.filter(p => (p.views > 0 ? (p.purchases/p.views) : 0) < 0.02).slice(0, 100).map(p => [p.productName, p.views, p.purchases, formatPercent(p.views > 0 ? p.purchases/p.views : 0)])
+    ['LOW CONVERSION PRODUCTS', 'Views', 'Purchases', 'Conv Rate'],
+    ...aggregation.productRows.filter(p => (p.views > 0 ? (p.purchases/p.views) : 0) < 0.02).slice(0, 100).map(p => [p.productName, p.views, p.purchases, formatPercent(p.views > 0 ? p.purchases/p.views : 0)]),
+    createEmpty(),
+    ['CATEGORY PERFORMANCE', 'Views', 'Purchases', 'Revenue'],
+    ...catRows.map(([name, stat]) => [name, stat.views, stat.purchases, formatCurrency(stat.revenue)])
   ]);
 
-  // 5. CONVERSION FUNNEL
-  const funnelVals = appendMeta([
-    ['CONVERSION FUNNEL'], createEmpty(),
-    ['FUNNEL STAGE', 'Users/Events', 'Drop-off'],
-    ['Page View', aggregation.globalFunnel.pageViews, '-'],
-    ['Product View', aggregation.globalFunnel.productViews, formatPercent(aggregation.globalFunnel.pageViews > 0 ? aggregation.globalFunnel.productViews/aggregation.globalFunnel.pageViews : 0)],
-    ['Add To Cart', aggregation.globalFunnel.addToCarts, formatPercent(aggregation.globalFunnel.productViews > 0 ? aggregation.globalFunnel.addToCarts/aggregation.globalFunnel.productViews : 0)],
-    ['Checkout Started', ndy(aggregation.globalFunnel.checkoutStarted), ndy(aggregation.globalFunnel.addToCarts > 0 ? aggregation.globalFunnel.checkoutStarted/aggregation.globalFunnel.addToCarts : 0, formatPercent)],
-    ['Guest Checkout Started', ndy(aggregation.globalFunnel.guestCheckoutStarted), ndy(aggregation.globalFunnel.checkoutStarted > 0 ? aggregation.globalFunnel.guestCheckoutStarted/aggregation.globalFunnel.checkoutStarted : 0, formatPercent)],
-    ['OTP Sent', ndy(aggregation.globalFunnel.otpSent), ndy(aggregation.globalFunnel.guestCheckoutStarted > 0 ? aggregation.globalFunnel.otpSent/aggregation.globalFunnel.guestCheckoutStarted : 0, formatPercent)],
-    ['OTP Verified', ndy(aggregation.globalFunnel.otpVerified), ndy(aggregation.globalFunnel.otpSent > 0 ? aggregation.globalFunnel.otpVerified/aggregation.globalFunnel.otpSent : 0, formatPercent)],
-    ['Purchase Completed', ndy(aggregation.globalFunnel.purchases), ndy(aggregation.globalFunnel.checkouts > 0 || aggregation.globalFunnel.otpVerified > 0 ? aggregation.globalFunnel.purchases/Math.max(aggregation.globalFunnel.checkoutStarted, aggregation.globalFunnel.otpVerified) : 0, formatPercent)]
-  ]);
-
-  // 6. TRAFFIC ANALYTICS
+  // 3. TRAFFIC ANALYTICS
   const trafficVals = appendMeta([
-    ['TRAFFIC SOURCE ANALYTICS'], createEmpty(),
-    ['Source', 'Visitors', 'Orders', 'Revenue', 'Conv Rate'],
+    ['TRAFFIC ANALYTICS'], createEmpty(),
+    ['KPI', 'Value'],
+    ['Total Visitors', aggregation.summary.totalVisitors],
+    ['New Visitors', aggregation.dailyRows.reduce((s, r)=>s+r.newVisitors,0)],
+    ['Returning Visitors', aggregation.dailyRows.reduce((s, r)=>s+r.repeatVisitors,0)],
+    createEmpty(),
+    ['TRAFFIC SOURCES', 'Visitors', 'Orders', 'Revenue', 'Conv Rate'],
     ...aggregation.utmRows.map(u => [u.source, u.visitors, u.orders, formatCurrency(u.revenue), formatPercent(u.conversionRate)])
   ]);
 
-  // 7. TIME BASED REPORTS
+  // 4. REVENUE ANALYTICS
   const reportHeaders = ['Date', 'Visitors', 'New', 'Repeat', 'Orders', 'Revenue', 'AOV', 'Conv Rate', 'Avg Duration (m)', 'Bounce Rate'];
   const mapReport = r => [r.date, r.visitors, r.newVisitors, r.repeatVisitors, r.orders, formatCurrency(r.revenue), formatCurrency(r.aov), formatPercent(r.purchaseConversionRate), formatMins(r.avgSessionDurationMins), formatPercent(r.bounceRate)];
-  
-  const dailyVals = appendMeta([['DAILY REPORT'], createEmpty(), reportHeaders, ...aggregation.dailyRows.map(mapReport)]);
-  const weeklyVals = appendMeta([['WEEKLY REPORT'], createEmpty(), reportHeaders, ...aggregation.weeklyRows.map(mapReport)]);
-  const monthlyVals = appendMeta([['MONTHLY REPORT'], createEmpty(), reportHeaders, ...aggregation.monthlyRows.map(mapReport)]);
 
-  // OTHERS
-  const revVals = appendMeta([['REVENUE ANALYTICS'], createEmpty(), reportHeaders, ...aggregation.dailyRows.map(mapReport)]);
+  const revVals = appendMeta([
+    ['REVENUE ANALYTICS'], createEmpty(),
+    ['KPI', 'Value'],
+    ['Total Revenue', ndy(aggregation.summary.totalRevenue, formatCurrency)],
+    ['Orders', ndy(aggregation.summary.totalOrders)],
+    ['Average Order Value', ndy(aggregation.summary.averageOrderValue, formatCurrency)],
+    createEmpty(),
+    ['DAILY REVENUE TREND', 'Revenue', 'Orders'],
+    ...aggregation.dailyRows.map(r => [r.date, formatCurrency(r.revenue), r.orders])
+  ]);
+
+  // 5. CUSTOMER ANALYTICS
   const custVals = appendMeta([
     ['CUSTOMER ANALYTICS'], createEmpty(), 
     ['Customer Type', 'Count', 'Revenue'], 
@@ -911,7 +911,37 @@ async function buildDashboardSheets(s) {
     ['Returning Customers', aggregation.dailyRows.reduce((s, r)=>s+r.repeatVisitors,0), ''],
     ['Guest Customers', aggregation.globalGuest.orders, formatCurrency(aggregation.globalGuest.revenue)]
   ]);
-  const leadVals = appendMeta([['LEAD ANALYTICS'], createEmpty(), ['Lead Type', 'Count'], ['Contact Forms', aggregation.leadData.contactForms], ['WhatsApp Clicks', aggregation.leadData.whatsappClicks]]);
+
+  // 6. CONVERSION FUNNEL
+  const funnelVals = appendMeta([
+    ['CONVERSION FUNNEL'], createEmpty(),
+    ['FUNNEL STAGE', 'Count', 'Drop-off %', 'Conversion %'],
+    ['Page View', aggregation.globalFunnel.pageViews, '-', '100%'],
+    ['Product View', aggregation.globalFunnel.productViews, formatPercent(aggregation.globalFunnel.pageViews > 0 ? (aggregation.globalFunnel.pageViews - aggregation.globalFunnel.productViews)/aggregation.globalFunnel.pageViews : 0), formatPercent(aggregation.globalFunnel.pageViews > 0 ? aggregation.globalFunnel.productViews/aggregation.globalFunnel.pageViews : 0)],
+    ['Add To Cart', aggregation.globalFunnel.addToCarts, formatPercent(aggregation.globalFunnel.productViews > 0 ? (aggregation.globalFunnel.productViews - aggregation.globalFunnel.addToCarts)/aggregation.globalFunnel.productViews : 0), formatPercent(aggregation.globalFunnel.productViews > 0 ? aggregation.globalFunnel.addToCarts/aggregation.globalFunnel.productViews : 0)],
+    ['Checkout Started', ndy(aggregation.globalFunnel.checkoutStarted), formatPercent(aggregation.globalFunnel.addToCarts > 0 ? (aggregation.globalFunnel.addToCarts - aggregation.globalFunnel.checkoutStarted)/aggregation.globalFunnel.addToCarts : 0), formatPercent(aggregation.globalFunnel.addToCarts > 0 ? aggregation.globalFunnel.checkoutStarted/aggregation.globalFunnel.addToCarts : 0)],
+    ['Purchase Completed', ndy(aggregation.globalFunnel.purchases), formatPercent(aggregation.globalFunnel.checkoutStarted > 0 ? (aggregation.globalFunnel.checkoutStarted - aggregation.globalFunnel.purchases)/aggregation.globalFunnel.checkoutStarted : 0), formatPercent(aggregation.globalFunnel.checkoutStarted > 0 ? aggregation.globalFunnel.purchases/aggregation.globalFunnel.checkoutStarted : 0)]
+  ]);
+
+  // 7. VISITOR INTELLIGENCE
+  const visitorVals = appendMeta([
+    ['VISITOR INTELLIGENCE'], createEmpty(),
+    ['METRIC', 'Value'],
+    ['New Visitors (All Time)', aggregation.dailyRows.reduce((sum, r) => sum + r.newVisitors, 0)],
+    ['Repeat Visitors', aggregation.dailyRows.reduce((sum, r) => sum + r.repeatVisitors, 0)],
+    ['Average Session Duration', formatMins(aggregation.executiveSummary.month.avgSessionDurationMins)],
+    createEmpty(), ['TOP EXIT PAGES', 'Exits'],
+    ...aggregation.topExitPages.map(r => [r.page, r.count])
+  ]);
+
+  // 8,9,10 DAILY/WEEKLY/MONTHLY
+  const dailyVals = appendMeta([['DAILY REPORT'], createEmpty(), reportHeaders, ...aggregation.dailyRows.map(mapReport)]);
+  const weeklyVals = appendMeta([['WEEKLY REPORT'], createEmpty(), reportHeaders, ...aggregation.weeklyRows.map(mapReport)]);
+  const monthlyVals = appendMeta([['MONTHLY REPORT'], createEmpty(), reportHeaders, ...aggregation.monthlyRows.map(mapReport)]);
+
+  // WHATSAPP / LEAD
+  const waVals = appendMeta([['WHATSAPP CHECKOUT ANALYTICS'], createEmpty(), ['Guest Orders', ndy(aggregation.globalGuest.orders)]]);
+  const leadVals = appendMeta([['LEAD ANALYTICS'], createEmpty(), ['Lead Type', 'Count'], ['Contact Forms', aggregation.leadData.contactForms]]);
 
   const sheetWrites = [
     { sheet: EXECUTIVE_DASHBOARD_SHEET, values: execVals },
@@ -970,45 +1000,91 @@ async function buildDashboardSheets(s) {
     const dailyId = getSheetId(DAILY_REPORT_SHEET);
     const trafficId = getSheetId(TRAFFIC_ANALYTICS_SHEET);
     const funnelId = getSheetId(CONVERSION_FUNNEL_SHEET);
+    const prodId = getSheetId(PRODUCT_ANALYTICS_SHEET);
+    const visitorId = getSheetId(VISITOR_INTELLIGENCE_SHEET);
+    const revId = getSheetId(REVENUE_ANALYTICS_SHEET);
     
-    // 1. Executive Dashboard (Revenue Trend)
+    // Formatting Requests for all data sheets
+    const allDataSheets = [
+      execId, visitorId, trafficId, prodId, revId,
+      getSheetId(CUSTOMER_ANALYTICS_SHEET), getSheetId(WHATSAPP_ANALYTICS_SHEET),
+      funnelId, dailyId, getSheetId(WEEKLY_REPORT_SHEET), getSheetId(MONTHLY_REPORT_SHEET),
+      getSheetId(LEAD_ANALYTICS_SHEET)
+    ].filter(id => id !== undefined);
+
+    for (const id of allDataSheets) {
+      const shMeta = refreshed.data.sheets.find(s => s.properties.sheetId === id);
+      if (shMeta) {
+        chartRequests.push(...chartBuilder.buildFormatRequests(shMeta, 2, 10));
+      }
+    }
+
+    // Raw Events formatting (freeze 1 row, no banding)
+    const rawEventsSh = refreshed.data.sheets.find(s => s.properties.title === 'Raw Events');
+    if (rawEventsSh) {
+      chartRequests.push(...chartBuilder.buildFormatRequests(rawEventsSh, 1, 25).filter(r => !r.addBanding && !r.repeatCell)); 
+      // Manually add basic bold header for raw events
+      chartRequests.push({
+        repeatCell: {
+          range: { sheetId: rawEventsSh.properties.sheetId, startRowIndex: 0, endRowIndex: 1 },
+          cell: { userEnteredFormat: { textFormat: { bold: true }, horizontalAlignment: 'CENTER' } },
+          fields: 'userEnteredFormat(textFormat,horizontalAlignment)'
+        }
+      });
+    }
+
+    // 1. Executive Dashboard Charts
     if(execId !== undefined && dailyId !== undefined && aggregation.dailyRows.length > 0) {
        chartRequests.push(chartBuilder.buildLineChart(execId, 'Revenue Trend (Daily)', 
-          chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 0, 1), // Date
-          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 5, 6)], // Revenue
-          12, 0, 500, 300
+          chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 0, 1), 
+          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 5, 6)], 
+          1, 4, 400, 250
        ));
        chartRequests.push(chartBuilder.buildLineChart(execId, 'Visitors Trend (Daily)', 
           chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 0, 1),
-          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 1, 2)], // Visitors
-          12, 5, 500, 300
+          [chartBuilder.createRange(dailyId, 2, 2 + aggregation.dailyRows.length, 1, 2)], 
+          1, 9, 400, 250
        ));
     }
     
-    // 2. Traffic Sources (Pie)
+    // 2. Traffic Sources (Pie) on Traffic & Exec
     if(trafficId !== undefined && aggregation.utmRows.length > 0) {
        chartRequests.push(chartBuilder.buildPieChart(execId, 'Traffic Sources', 
-          chartBuilder.createRange(trafficId, 2, 2 + aggregation.utmRows.length, 0, 1),
-          chartBuilder.createRange(trafficId, 2, 2 + aggregation.utmRows.length, 1, 2),
-          22, 0, 400, 300
+          chartBuilder.createRange(trafficId, 6, 6 + aggregation.utmRows.length, 0, 1),
+          chartBuilder.createRange(trafficId, 6, 6 + aggregation.utmRows.length, 1, 2),
+          14, 9, 400, 250
+       ));
+       chartRequests.push(chartBuilder.buildPieChart(trafficId, 'Traffic Sources', 
+          chartBuilder.createRange(trafficId, 6, 6 + aggregation.utmRows.length, 0, 1),
+          chartBuilder.createRange(trafficId, 6, 6 + aggregation.utmRows.length, 1, 2),
+          1, 6, 500, 300
        ));
     }
 
-    // 3. Conversion Funnel (Bar/Column)
+    // 3. Conversion Funnel (Bar/Column) on Funnel & Exec
     if(funnelId !== undefined) {
-       chartRequests.push(chartBuilder.buildColumnChart(funnelId, 'Conversion Funnel', 
-          chartBuilder.createRange(funnelId, 2, 11, 0, 1), // stages
-          [chartBuilder.createRange(funnelId, 2, 11, 1, 2)], // values
-          2, 4, 600, 400
-       ));
-       // Add funnel to exec dashboard too
        chartRequests.push(chartBuilder.buildColumnChart(execId, 'Conversion Funnel', 
-          chartBuilder.createRange(funnelId, 2, 11, 0, 1),
-          [chartBuilder.createRange(funnelId, 2, 11, 1, 2)],
-          22, 4, 600, 300
+          chartBuilder.createRange(funnelId, 2, 7, 0, 1),
+          [chartBuilder.createRange(funnelId, 2, 7, 1, 2)],
+          14, 4, 400, 250
+       ));
+       chartRequests.push(chartBuilder.buildColumnChart(funnelId, 'Conversion Funnel', 
+          chartBuilder.createRange(funnelId, 2, 7, 0, 1), 
+          [chartBuilder.createRange(funnelId, 2, 7, 1, 2)], 
+          2, 5, 600, 400
        ));
     }
 
+    // 4. Product Analytics Charts
+    if (prodId !== undefined && aggregation.productRows.length > 0) {
+      const pLen = Math.min(10, aggregation.productRows.length);
+      chartRequests.push(chartBuilder.buildColumnChart(prodId, 'Top 10 Viewed Products', 
+          chartBuilder.createRange(prodId, 2, 2 + pLen, 0, 1), 
+          [chartBuilder.createRange(prodId, 2, 2 + pLen, 1, 2)], 
+          2, 7, 500, 300
+       ));
+    }
+    
     if (chartRequests.length > 0) {
       await s.spreadsheets.batchUpdate({
         spreadsheetId: SHEET_ID,
