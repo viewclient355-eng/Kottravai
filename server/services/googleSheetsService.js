@@ -780,9 +780,11 @@ function buildAggregations(rows) {
         geo_country: row.geo_country || row.country || 'Unknown',
         geo_state: row.geo_state || row.state || 'Unknown',
         geo_city: row.geo_city || row.city || 'Unknown',
+        geo_region: row.geo_region || row.region || 'Unknown',
         geo_isp: row.geo_isp || row.isp || 'Unknown',
         geo_latitude: row.geo_latitude || '',
         geo_longitude: row.geo_longitude || '',
+        ip_address: row.ip_address || 'Unknown',
         device: row.device || 'Unknown'
       });
     }
@@ -881,6 +883,7 @@ function buildAggregations(rows) {
     globalFunnel,
     globalGuest,
     leadData,
+    uniqueVisitorGeo,
     visitorProfiles: Array.from(visitorProfiles.values()),
     sessionRows: Array.from(sessions.values()),
     executiveSummary: {
@@ -1104,7 +1107,13 @@ async function buildDashboardSheets(s) {
     ...aggregation.geography.states.map(s => [s.state, s.mobile, s.desktop, s.tablet]),
     createEmpty(),
     ['DAILY GEO TREND', 'Date', 'Visitors'],
-    ...aggregation.dailyRows.map(r => [r.date, r.visitors])
+    ...aggregation.dailyRows.map(r => [r.date, r.visitors]),
+    createEmpty(),
+    ['DETAILED VISITOR GEOGRAPHY'],
+    ['Visitor ID', 'IP Address', 'Country', 'State', 'City', 'Region', 'Latitude', 'Longitude', 'ISP'],
+    ...Array.from(aggregation.uniqueVisitorGeo.entries()).map(([vId, geo]) => [
+      vId, geo.ip_address, geo.geo_country, geo.geo_state, geo.geo_city, geo.geo_region, geo.geo_latitude, geo.geo_longitude, geo.geo_isp
+    ])
   ]);
 
   // 13. USER BEHAVIOR ANALYTICS
