@@ -294,11 +294,13 @@ function mapPayloadToRow(payload) {
     payload.duration_seconds || '',
     payload.metadata ? JSON.stringify(payload.metadata) : '',
     payload.ip_address || '',
-    payload.country || '',
-    payload.state || '',
-    payload.city || '',
-    payload.region || '',
-    payload.isp || ''
+    payload.geo_country || '',
+    payload.geo_state || '',
+    payload.geo_city || '',
+    payload.geo_region || '',
+    payload.geo_isp || '',
+    payload.geo_latitude || '',
+    payload.geo_longitude || ''
   ];
 }
 
@@ -605,9 +607,9 @@ function buildAggregations(rows) {
           visitorId,
           firstVisit: time,
           lastVisit: time,
-          country: String(row['country'] || 'Unknown').trim(),
-          state: String(row['state'] || 'Unknown').trim(),
-          city: String(row['city'] || 'Unknown').trim(),
+          country: String(row['geo_country'] || row['country'] || 'Unknown').trim(),
+          state: String(row['geo_state'] || row['state'] || 'Unknown').trim(),
+          city: String(row['geo_city'] || row['city'] || 'Unknown').trim(),
           source,
           device: String(row['device'] || row['device_type'] || 'Unknown').trim(),
           browser: String(row['browser'] || 'Unknown').trim(),
@@ -628,9 +630,14 @@ function buildAggregations(rows) {
       if (time > vp.lastVisit) {
         vp.lastVisit = time;
         vp.lastVisitedPage = pageUrl;
-        if (row['country'] && row['country'] !== 'Unknown') vp.country = String(row['country']).trim();
-        if (row['state'] && row['state'] !== 'Unknown') vp.state = String(row['state']).trim();
-        if (row['city'] && row['city'] !== 'Unknown') vp.city = String(row['city']).trim();
+        if (row['geo_country'] && row['geo_country'] !== 'Unknown') vp.country = String(row['geo_country']).trim();
+        else if (row['country'] && row['country'] !== 'Unknown') vp.country = String(row['country']).trim();
+
+        if (row['geo_state'] && row['geo_state'] !== 'Unknown') vp.state = String(row['geo_state']).trim();
+        else if (row['state'] && row['state'] !== 'Unknown') vp.state = String(row['state']).trim();
+
+        if (row['geo_city'] && row['geo_city'] !== 'Unknown') vp.city = String(row['geo_city']).trim();
+        else if (row['city'] && row['city'] !== 'Unknown') vp.city = String(row['city']).trim();
         if (source && source !== 'direct') vp.source = source;
       }
       
@@ -768,12 +775,14 @@ function buildAggregations(rows) {
     if (!vId || vId === 'unknown') return;
     
     // Last known geo for this visitor in the dataset
-    if (!uniqueVisitorGeo.has(vId) && row.country && row.country !== 'Unknown') {
+    if (!uniqueVisitorGeo.has(vId) && (row.geo_country || row.country)) {
       uniqueVisitorGeo.set(vId, {
-        country: row.country,
-        state: row.state || 'Unknown',
-        city: row.city || 'Unknown',
-        isp: row.isp || 'Unknown',
+        geo_country: row.geo_country || row.country || 'Unknown',
+        geo_state: row.geo_state || row.state || 'Unknown',
+        geo_city: row.geo_city || row.city || 'Unknown',
+        geo_isp: row.geo_isp || row.isp || 'Unknown',
+        geo_latitude: row.geo_latitude || '',
+        geo_longitude: row.geo_longitude || '',
         device: row.device || 'Unknown'
       });
     }
@@ -781,24 +790,24 @@ function buildAggregations(rows) {
 
   uniqueVisitorGeo.forEach((geo, vId) => {
     // Country
-    if (!geoCountries.has(geo.country)) geoCountries.set(geo.country, 0);
-    geoCountries.set(geo.country, geoCountries.get(geo.country) + 1);
+    if (!geoCountries.has(geo.geo_country)) geoCountries.set(geo.geo_country, 0);
+    geoCountries.set(geo.geo_country, geoCountries.get(geo.geo_country) + 1);
 
     // State
-    if (!geoStates.has(geo.state)) geoStates.set(geo.state, { visitors: 0, mobile: 0, desktop: 0, tablet: 0 });
-    const st = geoStates.get(geo.state);
+    if (!geoStates.has(geo.geo_state)) geoStates.set(geo.geo_state, { visitors: 0, mobile: 0, desktop: 0, tablet: 0 });
+    const st = geoStates.get(geo.geo_state);
     st.visitors++;
     if (geo.device === 'Mobile') st.mobile++;
     else if (geo.device === 'Desktop') st.desktop++;
     else if (geo.device === 'Tablet') st.tablet++;
 
     // City
-    if (!geoCities.has(geo.city)) geoCities.set(geo.city, 0);
-    geoCities.set(geo.city, geoCities.get(geo.city) + 1);
+    if (!geoCities.has(geo.geo_city)) geoCities.set(geo.geo_city, 0);
+    geoCities.set(geo.geo_city, geoCities.get(geo.geo_city) + 1);
 
     // ISP
-    if (!geoISPs.has(geo.isp)) geoISPs.set(geo.isp, 0);
-    geoISPs.set(geo.isp, geoISPs.get(geo.isp) + 1);
+    if (!geoISPs.has(geo.geo_isp)) geoISPs.set(geo.geo_isp, 0);
+    geoISPs.set(geo.geo_isp, geoISPs.get(geo.geo_isp) + 1);
   });
 
   const sortedMap = (map, comparator) => Array.from(map.values()).sort(comparator);

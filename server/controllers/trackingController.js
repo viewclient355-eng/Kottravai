@@ -19,14 +19,16 @@ const lookupIP = async (ip) => {
     const res = await axios.get(`https://ipwho.is/${ip}`, { timeout: 3000 });
     if (res.data && res.data.success) {
       const geoData = {
-        country: res.data.country || 'Unknown',
-        state: res.data.region || 'Unknown',
-        city: res.data.city || 'Unknown',
-        region: res.data.continent || 'Unknown',
-        isp: res.data.connection?.isp || 'Unknown'
+        geo_country: res.data.country || 'Unknown',
+        geo_state: res.data.region || 'Unknown',
+        geo_city: res.data.city || 'Unknown',
+        geo_region: res.data.continent || 'Unknown',
+        geo_isp: res.data.connection?.isp || 'Unknown',
+        geo_latitude: res.data.latitude || '',
+        geo_longitude: res.data.longitude || ''
       };
       geoCache.set(ip, geoData);
-      console.log(`[GEO_LOOKUP_SUCCESS] ${ip} -> ${geoData.country}`);
+      console.log(`[GEO_LOOKUP_SUCCESS] ${ip} -> ${geoData.geo_country}`);
       return geoData;
     } else {
       console.warn(`[GEO_LOOKUP_FAILED] API returned success: false for IP ${ip}`);
@@ -115,13 +117,15 @@ exports.trackBatch = async (req, res) => {
       
       const geoData = await lookupIP(payload.ip_address);
       if (geoData) {
-        payload.country = geoData.country;
-        payload.state = geoData.state;
-        payload.city = geoData.city;
-        payload.region = geoData.region;
-        payload.isp = geoData.isp;
+        payload.geo_country = geoData.geo_country;
+        payload.geo_state = geoData.geo_state;
+        payload.geo_city = geoData.geo_city;
+        payload.geo_region = geoData.geo_region;
+        payload.geo_isp = geoData.geo_isp;
+        payload.geo_latitude = geoData.geo_latitude;
+        payload.geo_longitude = geoData.geo_longitude;
       } else {
-        payload.country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+        payload.geo_country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
       }
       
       const h = hashEvent(payload);
