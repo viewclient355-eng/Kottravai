@@ -153,6 +153,7 @@ const DAILY_REPORT_SHEET = 'Daily Report';
 const WEEKLY_REPORT_SHEET = 'Weekly Report';
 const MONTHLY_REPORT_SHEET = 'Monthly Report';
 const LEAD_ANALYTICS_SHEET = 'Lead Analytics';
+const USER_BEHAVIOR_SHEET = 'User Behavior Analytics';
 const RAW_EVENTS_SHEET_TITLE = 'Raw Events';
 
 const GEOGRAPHY_ANALYTICS_SHEET = 'Geography Analytics';
@@ -167,6 +168,7 @@ const DATA_SHEET_ORDER = [
   WHATSAPP_ANALYTICS_SHEET,
   CONVERSION_FUNNEL_SHEET,
   GEOGRAPHY_ANALYTICS_SHEET,
+  USER_BEHAVIOR_SHEET,
   DAILY_REPORT_SHEET,
   WEEKLY_REPORT_SHEET,
   MONTHLY_REPORT_SHEET,
@@ -501,6 +503,7 @@ function buildAggregations(rows) {
   const geoCities = new Map();
   const geoISPs = new Map();
   const utmSources = new Map();
+  const visitorProfiles = new Map();
   
   let totalProductViewsDetected = 0;
   
@@ -594,6 +597,61 @@ function buildAggregations(rows) {
       if (eventType === 'otp_sent') sess.otpSent++;
       if (eventType === 'otp_verified') sess.otpVerified++;
       if (eventType === 'whatsapp_click') sess.whatsappClicks++;
+    }
+
+    if (visitorId) {
+      if (!visitorProfiles.has(visitorId)) {
+        visitorProfiles.set(visitorId, {
+          visitorId,
+          firstVisit: time,
+          lastVisit: time,
+          country: String(row['country'] || 'Unknown').trim(),
+          state: String(row['state'] || 'Unknown').trim(),
+          city: String(row['city'] || 'Unknown').trim(),
+          source,
+          device: String(row['device'] || row['device_type'] || 'Unknown').trim(),
+          browser: String(row['browser'] || 'Unknown').trim(),
+          sessions: new Set(),
+          pageViews: 0,
+          productViews: 0,
+          addToCarts: 0,
+          orders: 0,
+          revenue: 0,
+          productCounts: new Map(),
+          categoryCounts: new Map(),
+          lastVisitedPage: pageUrl
+        });
+      }
+      
+      const vp = visitorProfiles.get(visitorId);
+      if (time < vp.firstVisit) vp.firstVisit = time;
+      if (time > vp.lastVisit) {
+        vp.lastVisit = time;
+        vp.lastVisitedPage = pageUrl;
+        if (row['country'] && row['country'] !== 'Unknown') vp.country = String(row['country']).trim();
+        if (row['state'] && row['state'] !== 'Unknown') vp.state = String(row['state']).trim();
+        if (row['city'] && row['city'] !== 'Unknown') vp.city = String(row['city']).trim();
+        if (source && source !== 'direct') vp.source = source;
+      }
+      
+      if (sessionId) vp.sessions.add(sessionId);
+      
+      if (eventType === 'page_view') vp.pageViews++;
+      if (eventType === 'product_view') {
+        vp.productViews++;
+        if (productName && productName !== 'Unknown') {
+          vp.productCounts.set(productName, (vp.productCounts.get(productName) || 0) + 1);
+        }
+        const cat = row['category'];
+        if (cat && cat !== 'Unknown') {
+          vp.categoryCounts.set(cat, (vp.categoryCounts.get(cat) || 0) + 1);
+        }
+      }
+      if (eventType === 'add_to_cart') vp.addToCarts++;
+      if (eventType === 'purchase_completed') {
+        vp.orders++;
+        vp.revenue += revenue;
+      }
     }
 
     if (productId || productName) {
@@ -814,6 +872,8 @@ function buildAggregations(rows) {
     globalFunnel,
     globalGuest,
     leadData,
+    visitorProfiles: Array.from(visitorProfiles.values()),
+    sessionRows: Array.from(sessions.values()),
     executiveSummary: {
       today: getBucketOrZero(dailyRows, todayStr),
       week: getBucketOrZero(weeklyRows, weekStr),
@@ -1038,6 +1098,110 @@ async function buildDashboardSheets(s) {
     ...aggregation.dailyRows.map(r => [r.date, r.visitors])
   ]);
 
+  // 13. USER BEHAVIOR ANALYTICS
+  const ubVals = [];
+  ubVals.push(['USER BEHAVIOR ANALYTICS'], createEmpty(), ['Generated At', new Date().toISOString()]);
+  ubVals.push(createEmpty());
+
+  let totalVisitors = aggregation.visitorProfiles.length;
+  let returningVisitors = 0;
+  let customers = 0;
+  let highIntent = 0;
+  let totalSess = 0;
+  let totalRev = 0;
+
+  const profileRows = [];
+  const msInDay = 1000 * 60 * 60 * 24;
+
+  const visitorDurations = new Map();
+  aggregation.sessionRows.forEach(sess => {
+     if (sess.visitorId) {
+        const dur = (sess.maxTime - sess.minTime) / 60000;
+        visitorDurations.set(sess.visitorId, (visitorDurations.get(sess.visitorId) || 0) + dur);
+     }
+  });
+
+  const getTopFromMap = (map) => {
+    let top = 'None';
+    let max = 0;
+    for (const [key, val] of map.entries()) {
+      if (val > max) { max = val; top = key; }
+    }
+    return top;
+  };
+
+  aggregation.visitorProfiles.forEach(vp => {
+    const daysActive = Math.max(1, Math.ceil((vp.lastVisit - vp.firstVisit) / msInDay));
+    const daysSinceLast = Math.floor((Date.now() - vp.lastVisit) / msInDay);
+    const totalSessions = vp.sessions.size;
+    const ltv = vp.revenue;
+    const aov = vp.orders > 0 ? vp.revenue / vp.orders : 0;
+    const timeSpent = visitorDurations.get(vp.visitorId) || 0;
+    
+    const engagementScore = (vp.pageViews * 1) + (vp.productViews * 2) + (vp.addToCarts * 5) + (vp.orders * 10);
+    
+    let status = 'New Visitor';
+    if (vp.orders > 0) status = 'Customer';
+    else if (totalSessions > 1) status = 'Returning Visitor';
+    else if (vp.productViews > 5 && vp.orders === 0) status = 'Window Shopper';
+    else if (vp.addToCarts > 0) status = 'High Intent';
+
+    if (status === 'Customer') customers++;
+    else if (status === 'Returning Visitor') returningVisitors++;
+    if (status === 'High Intent' || vp.addToCarts > 0) highIntent++;
+    totalSess += totalSessions;
+    totalRev += vp.revenue;
+
+    profileRows.push([
+      vp.visitorId,
+      new Date(vp.firstVisit).toISOString(),
+      new Date(vp.lastVisit).toISOString(),
+      vp.country,
+      vp.state,
+      vp.city,
+      vp.source,
+      vp.device,
+      vp.browser,
+      totalSessions,
+      vp.pageViews,
+      vp.productViews,
+      vp.addToCarts,
+      Math.round(timeSpent * 10) / 10,
+      getTopFromMap(vp.productCounts),
+      getTopFromMap(vp.categoryCounts),
+      vp.orders,
+      vp.revenue,
+      Math.round(aov * 100) / 100,
+      vp.lastVisitedPage,
+      status,
+      daysActive,
+      daysSinceLast,
+      ltv,
+      engagementScore
+    ]);
+  });
+
+  const avgSessCount = totalVisitors > 0 ? (totalSess / totalVisitors).toFixed(2) : 0;
+  const avgRevPerVis = totalVisitors > 0 ? (totalRev / totalVisitors).toFixed(2) : 0;
+
+  ubVals.push(['EXECUTIVE SUMMARY', '', '', '', '', '']);
+  ubVals.push(['Total Visitors', 'Returning Visitors', 'Customers', 'High Intent Visitors', 'Avg Session Count', 'Avg Revenue Per Visitor']);
+  ubVals.push([totalVisitors, returningVisitors, customers, highIntent, avgSessCount, avgRevPerVis]);
+  ubVals.push(createEmpty());
+  
+  for(let i=0; i<20; i++) ubVals.push(createEmpty()); // space for charts
+  
+  ubVals.push([
+    'Visitor ID', 'First Visit Date', 'Last Visit Date', 'Country', 'State', 'City', 'Traffic Source',
+    'Device', 'Browser', 'Total Sessions', 'Total Page Views', 'Total Product Views', 'Total Add To Cart',
+    'Total Time Spent (Mins)', 'Most Viewed Product', 'Most Viewed Category', 'Orders Placed', 'Total Revenue',
+    'Average Order Value', 'Last Visited Page', 'Visitor Status', 'Days Active', 'Days Since Last Visit',
+    'Customer Lifetime Value', 'Engagement Score'
+  ]);
+  
+  profileRows.sort((a,b) => b[24] - a[24]);
+  ubVals.push(...profileRows);
+
   const sheetWrites = [
     { sheet: EXECUTIVE_DASHBOARD_SHEET, values: execVals },
     { sheet: VISITOR_INTELLIGENCE_SHEET, values: visitorVals },
@@ -1048,6 +1212,7 @@ async function buildDashboardSheets(s) {
     { sheet: WHATSAPP_ANALYTICS_SHEET, values: waVals },
     { sheet: CONVERSION_FUNNEL_SHEET, values: funnelVals },
     { sheet: GEOGRAPHY_ANALYTICS_SHEET, values: geoVals },
+    { sheet: USER_BEHAVIOR_SHEET, values: ubVals },
     { sheet: DAILY_REPORT_SHEET, values: dailyVals },
     { sheet: WEEKLY_REPORT_SHEET, values: weeklyVals },
     { sheet: MONTHLY_REPORT_SHEET, values: monthlyVals },
@@ -1237,6 +1402,17 @@ async function buildDashboardSheets(s) {
             rIdx + dLen + 2, 5, 800, 300
         ));
       }
+    }
+
+    // 6. User Behavior Analytics Charts
+    const ubId = getSheetId(USER_BEHAVIOR_SHEET);
+    if (ubId !== undefined) {
+      // 1. Visitor Segmentation Pie Chart (Domain: B2:E2, Data: B3:E3)
+      chartRequests.push(chartBuilder.buildPieChart(ubId, 'Visitor Segmentation', 
+          chartBuilder.createRange(ubId, 1, 2, 1, 5),
+          chartBuilder.createRange(ubId, 2, 3, 1, 5),
+          4, 1, 400, 300
+      ));
     }
 
     if (chartRequests.length > 0) {
