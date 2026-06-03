@@ -43,6 +43,10 @@ const generateDailyAnalyticsSummary = async () => {
   const trafficSources = new Map();
   
   const deviceCounts = { Mobile: 0, Desktop: 0, Tablet: 0, Unknown: 0 };
+  
+  const geoCountries = new Map();
+  const geoStates = new Map();
+  const geoCities = new Map();
 
   const visitorFirstSeen = new Map();
   // Pass 1: find first seen date for all visitors across all history
@@ -106,6 +110,16 @@ const generateDailyAnalyticsSummary = async () => {
     else if (device.toLowerCase() === 'desktop') deviceCounts.Desktop++;
     else if (device.toLowerCase() === 'tablet') deviceCounts.Tablet++;
     else deviceCounts.Unknown++;
+    
+    // Geographic counts (only count unique visitor locations for the day)
+    const country = row['country'];
+    const state = row['state'];
+    const city = row['city'];
+    if (visitorId !== 'unknown' && country && country !== 'Unknown') {
+      geoCountries.set(country, (geoCountries.get(country) || new Set()).add(visitorId));
+      if (state && state !== 'Unknown') geoStates.set(state, (geoStates.get(state) || new Set()).add(visitorId));
+      if (city && city !== 'Unknown') geoCities.set(city, (geoCities.get(city) || new Set()).add(visitorId));
+    }
   });
 
   // Calculate top items
@@ -154,7 +168,10 @@ const generateDailyAnalyticsSummary = async () => {
     topPage,
     topTraffic,
     trafficSources: Object.fromEntries(trafficSources),
-    deviceBreakdown: deviceCounts
+    deviceBreakdown: deviceCounts,
+    topCountry: Array.from(geoCountries.entries()).sort((a,b) => b[1].size - a[1].size)[0]?.[0] || 'Unknown',
+    topState: Array.from(geoStates.entries()).sort((a,b) => b[1].size - a[1].size)[0]?.[0] || 'Unknown',
+    topCity: Array.from(geoCities.entries()).sort((a,b) => b[1].size - a[1].size)[0]?.[0] || 'Unknown'
   };
 };
 

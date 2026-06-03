@@ -155,6 +155,8 @@ const MONTHLY_REPORT_SHEET = 'Monthly Report';
 const LEAD_ANALYTICS_SHEET = 'Lead Analytics';
 const RAW_EVENTS_SHEET_TITLE = 'Raw Events';
 
+const GEOGRAPHY_ANALYTICS_SHEET = 'Geography Analytics';
+
 const DATA_SHEET_ORDER = [
   EXECUTIVE_DASHBOARD_SHEET,
   VISITOR_INTELLIGENCE_SHEET,
@@ -164,6 +166,7 @@ const DATA_SHEET_ORDER = [
   CUSTOMER_ANALYTICS_SHEET,
   WHATSAPP_ANALYTICS_SHEET,
   CONVERSION_FUNNEL_SHEET,
+  GEOGRAPHY_ANALYTICS_SHEET,
   DAILY_REPORT_SHEET,
   WEEKLY_REPORT_SHEET,
   MONTHLY_REPORT_SHEET,
@@ -194,10 +197,16 @@ const RAW_EVENTS_HEADER_ROW = [
   'Order Total',
   'Payment Method',
   'Duration Seconds',
-  'Metadata'
+  'Metadata',
+  'IP Address',
+  'Country',
+  'State',
+  'City',
+  'Region',
+  'ISP'
 ];
 
-const DEFAULT_RANGE = `${RAW_EVENTS_SHEET_TITLE}!A1:W`;
+const DEFAULT_RANGE = `${RAW_EVENTS_SHEET_TITLE}!A1:AC`;
 
 async function ensureAnalyticsSheetExists(s, spreadsheetData) {
   const spreadsheet = spreadsheetData || await getSpreadsheetMetadata(s);
@@ -249,7 +258,7 @@ async function ensureAnalyticsSheetExists(s, spreadsheetData) {
   const createdSheet = createResponse.data.replies[0].addSheet.properties;
   await s.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
-    range: `${RAW_EVENTS_SHEET_TITLE}!A1:W1`,
+    range: `${RAW_EVENTS_SHEET_TITLE}!A1:AC1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [RAW_EVENTS_HEADER_ROW] }
   });
@@ -281,7 +290,13 @@ function mapPayloadToRow(payload) {
     payload.order_total || payload.total_amount || '',
     payload.payment_method || '',
     payload.duration_seconds || '',
-    payload.metadata ? JSON.stringify(payload.metadata) : ''
+    payload.metadata ? JSON.stringify(payload.metadata) : '',
+    payload.ip_address || '',
+    payload.country || '',
+    payload.state || '',
+    payload.city || '',
+    payload.region || '',
+    payload.isp || ''
   ];
 }
 
@@ -418,7 +433,7 @@ async function ensureRawEventsSheetExists(s, spreadsheetData) {
 
   await s.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
-    range: `${RAW_EVENTS_SHEET_TITLE}!A1:W1`,
+    range: `${RAW_EVENTS_SHEET_TITLE}!A1:AC1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [RAW_EVENTS_HEADER_ROW] }
   });
@@ -481,6 +496,10 @@ function buildAggregations(rows) {
   const weekly = new Map();
   const monthly = new Map();
   const exitPages = new Map();
+  const geoCountries = new Map();
+  const geoStates = new Map();
+  const geoCities = new Map();
+  const geoISPs = new Map();
   const utmSources = new Map();
   
   let totalProductViewsDetected = 0;
@@ -684,6 +703,46 @@ function buildAggregations(rows) {
     }
   });
 
+  // Pass 3: Process Geolocation Data (unique visitors per location)
+  const uniqueVisitorGeo = new Map(); // visitorId -> { country, state, city, isp, device }
+  rows.forEach(row => {
+    const vId = row.visitor_id;
+    if (!vId || vId === 'unknown') return;
+    
+    // Last known geo for this visitor in the dataset
+    if (!uniqueVisitorGeo.has(vId) && row.country && row.country !== 'Unknown') {
+      uniqueVisitorGeo.set(vId, {
+        country: row.country,
+        state: row.state || 'Unknown',
+        city: row.city || 'Unknown',
+        isp: row.isp || 'Unknown',
+        device: row.device || 'Unknown'
+      });
+    }
+  });
+
+  uniqueVisitorGeo.forEach((geo, vId) => {
+    // Country
+    if (!geoCountries.has(geo.country)) geoCountries.set(geo.country, 0);
+    geoCountries.set(geo.country, geoCountries.get(geo.country) + 1);
+
+    // State
+    if (!geoStates.has(geo.state)) geoStates.set(geo.state, { visitors: 0, mobile: 0, desktop: 0, tablet: 0 });
+    const st = geoStates.get(geo.state);
+    st.visitors++;
+    if (geo.device === 'Mobile') st.mobile++;
+    else if (geo.device === 'Desktop') st.desktop++;
+    else if (geo.device === 'Tablet') st.tablet++;
+
+    // City
+    if (!geoCities.has(geo.city)) geoCities.set(geo.city, 0);
+    geoCities.set(geo.city, geoCities.get(geo.city) + 1);
+
+    // ISP
+    if (!geoISPs.has(geo.isp)) geoISPs.set(geo.isp, 0);
+    geoISPs.set(geo.isp, geoISPs.get(geo.isp) + 1);
+  });
+
   const sortedMap = (map, comparator) => Array.from(map.values()).sort(comparator);
   
   const mapBucketToRow = (b) => {
@@ -769,6 +828,12 @@ function buildAggregations(rows) {
       revenuePerVisitor: totalVisitors > 0 ? (totalRevenue / totalVisitors) : 0,
       overallConversionRate: totalVisitors > 0 ? (totalOrders / totalVisitors) : 0,
       overallRepeatRatio: totalVisitors > 0 ? ((totalVisitors - Array.from(visitorFirstSeen.entries()).filter(([v,t]) => getMonthKeyIST(new Date(t)) === monthStr).length) / totalVisitors) : 0
+    },
+    geography: {
+      countries: Array.from(geoCountries.entries()).map(([k,v]) => ({ country: k, visitors: v })).sort((a,b) => b.visitors - a.visitors),
+      states: Array.from(geoStates.entries()).map(([k,v]) => ({ state: k, ...v })).sort((a,b) => b.visitors - a.visitors),
+      cities: Array.from(geoCities.entries()).map(([k,v]) => ({ city: k, visitors: v })).sort((a,b) => b.visitors - a.visitors),
+      isps: Array.from(geoISPs.entries()).map(([k,v]) => ({ isp: k, visitors: v })).sort((a,b) => b.visitors - a.visitors)
     }
   };
 }
@@ -943,6 +1008,36 @@ async function buildDashboardSheets(s) {
   const waVals = appendMeta([['WHATSAPP CHECKOUT ANALYTICS'], createEmpty(), ['Guest Orders', ndy(aggregation.globalGuest.orders)]]);
   const leadVals = appendMeta([['LEAD ANALYTICS'], createEmpty(), ['Lead Type', 'Count'], ['Contact Forms', aggregation.leadData.contactForms]]);
 
+  // 12. GEOGRAPHY ANALYTICS
+  const geoVals = appendMeta([
+    ['GEOGRAPHY ANALYTICS'], createEmpty(),
+    ['EXECUTIVE GEO SUMMARY', 'Value'],
+    ['Total Countries', aggregation.geography.countries.length],
+    ['Total States', aggregation.geography.states.length],
+    ['Total Cities', aggregation.geography.cities.length],
+    ['Top Country', aggregation.geography.countries[0]?.country || 'None'],
+    ['Top State', aggregation.geography.states[0]?.state || 'None'],
+    ['Top City', aggregation.geography.cities[0]?.city || 'None'],
+    createEmpty(),
+    ['VISITORS BY COUNTRY', 'Visitors', 'Percentage'],
+    ...aggregation.geography.countries.map(c => [c.country, c.visitors, formatPercent(c.visitors / (aggregation.summary.uniqueVisitors || 1))]),
+    createEmpty(),
+    ['VISITORS BY STATE', 'Visitors', 'Percentage'],
+    ...aggregation.geography.states.map(s => [s.state, s.visitors, formatPercent(s.visitors / (aggregation.summary.uniqueVisitors || 1))]),
+    createEmpty(),
+    ['VISITORS BY CITY', 'Visitors', 'Percentage'],
+    ...aggregation.geography.cities.map(c => [c.city, c.visitors, formatPercent(c.visitors / (aggregation.summary.uniqueVisitors || 1))]),
+    createEmpty(),
+    ['ISP ANALYTICS', 'Visitors'],
+    ...aggregation.geography.isps.map(i => [i.isp, i.visitors]),
+    createEmpty(),
+    ['DEVICE + GEO CROSS ANALYSIS (STATE)', 'Mobile', 'Desktop', 'Tablet'],
+    ...aggregation.geography.states.map(s => [s.state, s.mobile, s.desktop, s.tablet]),
+    createEmpty(),
+    ['DAILY GEO TREND', 'Date', 'Visitors'],
+    ...aggregation.dailyRows.map(r => [r.date, r.visitors])
+  ]);
+
   const sheetWrites = [
     { sheet: EXECUTIVE_DASHBOARD_SHEET, values: execVals },
     { sheet: VISITOR_INTELLIGENCE_SHEET, values: visitorVals },
@@ -952,6 +1047,7 @@ async function buildDashboardSheets(s) {
     { sheet: CUSTOMER_ANALYTICS_SHEET, values: custVals },
     { sheet: WHATSAPP_ANALYTICS_SHEET, values: waVals },
     { sheet: CONVERSION_FUNNEL_SHEET, values: funnelVals },
+    { sheet: GEOGRAPHY_ANALYTICS_SHEET, values: geoVals },
     { sheet: DAILY_REPORT_SHEET, values: dailyVals },
     { sheet: WEEKLY_REPORT_SHEET, values: weeklyVals },
     { sheet: MONTHLY_REPORT_SHEET, values: monthlyVals },
@@ -980,6 +1076,7 @@ async function buildDashboardSheets(s) {
   console.log(`[PRODUCTS_AGGREGATED] ${aggregation.totalProductsAggregated}`);
   console.log(`[PRODUCT_ANALYTICS_ROWS_WRITTEN] ${prodVals.length}`);
   console.log(`[PAGE_METRICS_ROWS_WRITTEN] 0 (OBSOLETE SHEET)`);
+  console.log(`[GEOGRAPHY_ANALYTICS_ROWS_WRITTEN] ${geoVals.length}`);
   console.log(`[REVENUE_ROWS_WRITTEN] ${revVals.length}`);
   console.log('[DASHBOARD_REBUILD_COMPLETE] All dashboard sheets rebuilt successfully');
 
@@ -1003,13 +1100,14 @@ async function buildDashboardSheets(s) {
     const prodId = getSheetId(PRODUCT_ANALYTICS_SHEET);
     const visitorId = getSheetId(VISITOR_INTELLIGENCE_SHEET);
     const revId = getSheetId(REVENUE_ANALYTICS_SHEET);
+    const geoId = getSheetId(GEOGRAPHY_ANALYTICS_SHEET);
     
     // Formatting Requests for all data sheets
     const allDataSheets = [
       execId, visitorId, trafficId, prodId, revId,
       getSheetId(CUSTOMER_ANALYTICS_SHEET), getSheetId(WHATSAPP_ANALYTICS_SHEET),
       funnelId, dailyId, getSheetId(WEEKLY_REPORT_SHEET), getSheetId(MONTHLY_REPORT_SHEET),
-      getSheetId(LEAD_ANALYTICS_SHEET)
+      getSheetId(LEAD_ANALYTICS_SHEET), geoId
     ].filter(id => id !== undefined);
 
     for (const id of allDataSheets) {
@@ -1084,7 +1182,63 @@ async function buildDashboardSheets(s) {
           2, 7, 500, 300
        ));
     }
-    
+
+    // 5. Geography Analytics Charts
+    if (geoId !== undefined) {
+      // Calculate start rows dynamically based on array lengths
+      const cLen = aggregation.geography.countries.length;
+      const sLen = aggregation.geography.states.length;
+      const ciLen = aggregation.geography.cities.length;
+      const iLen = aggregation.geography.isps.length;
+      const dLen = aggregation.dailyRows.length;
+      
+      let rIdx = 12; // Start of Countries
+      if (cLen > 0) {
+        chartRequests.push(chartBuilder.buildPieChart(geoId, 'Top Countries Distribution', 
+            chartBuilder.createRange(geoId, rIdx, rIdx + cLen, 0, 1),
+            chartBuilder.createRange(geoId, rIdx, rIdx + cLen, 1, 2),
+            12, 5, 400, 300
+        ));
+      }
+      rIdx += cLen + 2; // Move to States
+      
+      if (sLen > 0) {
+        chartRequests.push(chartBuilder.buildColumnChart(geoId, 'Top States by Visitors', 
+            chartBuilder.createRange(geoId, rIdx, rIdx + sLen, 0, 1),
+            [chartBuilder.createRange(geoId, rIdx, rIdx + sLen, 1, 2)],
+            12, 12, 600, 300
+        ));
+      }
+      rIdx += sLen + 2; // Move to Cities
+      
+      if (ciLen > 0) {
+        chartRequests.push(chartBuilder.buildColumnChart(geoId, 'Top Cities by Visitors', 
+            chartBuilder.createRange(geoId, rIdx, rIdx + ciLen, 0, 1),
+            [chartBuilder.createRange(geoId, rIdx, rIdx + ciLen, 1, 2)],
+            rIdx + ciLen + 2, 5, 600, 300
+        ));
+      }
+      rIdx += ciLen + 2; // Move to ISPs
+      
+      if (iLen > 0) {
+        chartRequests.push(chartBuilder.buildColumnChart(geoId, 'Visitors by ISP', 
+            chartBuilder.createRange(geoId, rIdx, rIdx + iLen, 0, 1),
+            [chartBuilder.createRange(geoId, rIdx, rIdx + iLen, 1, 2)],
+            rIdx + iLen + 2, 5, 600, 300
+        ));
+      }
+      rIdx += iLen + 2; // Move to Cross Analysis
+      rIdx += sLen + 2; // Move to Daily Trend
+      
+      if (dLen > 0) {
+        chartRequests.push(chartBuilder.buildLineChart(geoId, 'Daily Geographic Traffic Trend', 
+            chartBuilder.createRange(geoId, rIdx, rIdx + dLen, 1, 2), // Date column
+            [chartBuilder.createRange(geoId, rIdx, rIdx + dLen, 2, 3)], // Visitors column
+            rIdx + dLen + 2, 5, 800, 300
+        ));
+      }
+    }
+
     if (chartRequests.length > 0) {
       await s.spreadsheets.batchUpdate({
         spreadsheetId: SHEET_ID,
@@ -1320,7 +1474,7 @@ exports.diagnosticTest = async () => {
     console.log('[DIAG] Step 5: Reading headers...');
     const headers = await s.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${RAW_EVENTS_SHEET_TITLE}!A1:W1`
+      range: `${RAW_EVENTS_SHEET_TITLE}!A1:AC1`
     });
     results.steps.push({
       name: 'read_headers',
@@ -1515,7 +1669,7 @@ exports.diagnosticTest = async () => {
     console.log('[DIAG] Step 5: Reading headers...');
     const headers = await s.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${RAW_EVENTS_SHEET_TITLE}!A1:W1`
+      range: `${RAW_EVENTS_SHEET_TITLE}!A1:AC1`
     });
     results.steps.push({
       name: 'read_headers',

@@ -1,9 +1,42 @@
 const googleSheetsService = require('../services/googleSheetsService');
 const { sanitizeTrackingPayload, hashEvent } = require('../utils/trackingUtils');
 const NodeCache = require('node-cache');
+const axios = require('axios');
 
 // In-memory duplicate prevention cache (short TTL)
 const recentEvents = new NodeCache({ stdTTL: 60, checkperiod: 30 });
+// Geo cache for 24 hours
+const geoCache = new NodeCache({ stdTTL: 86400 });
+
+// Helper for Geo IP Lookup
+const lookupIP = async (ip) => {
+  if (!ip || ip === '127.0.0.1' || ip === '::1') return null;
+  
+  const cached = geoCache.get(ip);
+  if (cached) return cached;
+
+  try {
+    const res = await axios.get(`https://ipwho.is/${ip}`, { timeout: 3000 });
+    if (res.data && res.data.success) {
+      const geoData = {
+        country: res.data.country || 'Unknown',
+        state: res.data.region || 'Unknown',
+        city: res.data.city || 'Unknown',
+        region: res.data.continent || 'Unknown',
+        isp: res.data.connection?.isp || 'Unknown'
+      };
+      geoCache.set(ip, geoData);
+      console.log(`[GEO_LOOKUP_SUCCESS] ${ip} -> ${geoData.country}`);
+      return geoData;
+    } else {
+      console.warn(`[GEO_LOOKUP_FAILED] API returned success: false for IP ${ip}`);
+      return null;
+    }
+  } catch (err) {
+    console.warn(`[GEO_LOOKUP_FAILED] Error resolving IP ${ip}: ${err.message}`);
+    return null;
+  }
+};
 
 const REQUIRED_FIELDS = ['event_type', 'page', 'timestamp', 'session_id'];
 
@@ -14,7 +47,18 @@ exports.trackEvent = async (req, res) => {
     
     // Enrich payload with server-side network data
     payload.ip_address = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-    payload.ip_location = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+    
+    // Perform Async GeoLookup without blocking response
+    const geoData = await lookupIP(payload.ip_address);
+    if (geoData) {
+      payload.country = geoData.country;
+      payload.state = geoData.state;
+      payload.city = geoData.city;
+      payload.region = geoData.region;
+      payload.isp = geoData.isp;
+    } else {
+      payload.country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+    }
 
     for (const f of REQUIRED_FIELDS) {
       if (!payload[f]) {
@@ -68,7 +112,17 @@ exports.trackBatch = async (req, res) => {
       
       // Enrich payload with server-side network data
       payload.ip_address = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-      payload.ip_location = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+      
+      const geoData = await lookupIP(payload.ip_address);
+      if (geoData) {
+        payload.country = geoData.country;
+        payload.state = geoData.state;
+        payload.city = geoData.city;
+        payload.region = geoData.region;
+        payload.isp = geoData.isp;
+      } else {
+        payload.country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+      }
       
       const h = hashEvent(payload);
       if (recentEvents.get(h)) continue;

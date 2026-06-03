@@ -126,6 +126,25 @@ const buildDailyAnalyticsEmail = (summary) => {
           </div>
         </div>
 
+        <!-- Geography Summary -->
+        <h2 class="section-title">🌍 Geography Summary</h2>
+        <div class="kpi-grid" style="margin-bottom: 25px;">
+          <div class="kpi-row">
+            <div class="kpi-card">
+              <span class="label">Top Country</span>
+              <span class="value" style="font-size: 16px;">${summary.topCountry}</span>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Top State</span>
+              <span class="value" style="font-size: 16px;">${summary.topState}</span>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Top City</span>
+              <span class="value" style="font-size: 16px;">${summary.topCity}</span>
+            </div>
+          </div>
+        </div>
+
         <h2 class="section-title">Engagement Metrics</h2>
         <div class="kpi-grid">
           <div class="kpi-row">
