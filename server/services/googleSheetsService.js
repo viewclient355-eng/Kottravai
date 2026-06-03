@@ -1589,4 +1589,4 @@ exports.diagnosticTest = async () => {
 // Exports for testing
 exports.fetchRawEventRows = fetchRawEventRows;
 exports.buildAggregations = buildAggregations;
-exports.getAuth = getAuth;
+exports.sheets = sheets;

@@ -1,4 +1,4 @@
-const { getAuth, fetchRawEventRows } = require('./googleSheetsService');
+const { sheets, fetchRawEventRows } = require('./googleSheetsService');
 
 // Helper to safely parse numbers
 const getSafeNumber = (val) => {
@@ -9,7 +9,7 @@ const getSafeNumber = (val) => {
 
 const generateDailyAnalyticsSummary = async () => {
   console.log('[DAILY_ANALYTICS] Fetching Raw Events');
-  const s = await getAuth();
+  const s = await sheets();
   const rows = await fetchRawEventRows(s);
 
   // Determine "yesterday" in IST
