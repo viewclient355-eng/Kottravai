@@ -1,0 +1,75 @@
+const { generateDailyAnalyticsSummary } = require('./dailyAnalyticsService');
+const { buildDailyAnalyticsEmail } = require('./dailyEmailTemplate');
+const { sendEmail } = require('../utils/mailer');
+
+const sendDailyAnalyticsEmail = async () => {
+  console.log('[DAILY_ANALYTICS] Starting email generation process...');
+  
+  try {
+    const emailsEnv = process.env.DAILY_ANALYTICS_EMAILS;
+    if (!emailsEnv) {
+      console.log('[DAILY_ANALYTICS] DAILY_ANALYTICS_EMAILS not set. Skipping.');
+      return { success: false, reason: 'No recipients configured.' };
+    }
+
+    const recipients = emailsEnv.split(',').map(e => e.trim()).filter(e => e);
+    if (recipients.length === 0) {
+      console.log('[DAILY_ANALYTICS] Recipient list empty. Skipping.');
+      return { success: false, reason: 'Recipient list empty.' };
+    }
+
+    // 1. Generate Summary
+    const summary = await generateDailyAnalyticsSummary();
+
+    // 2. Build HTML
+    const htmlContent = buildDailyAnalyticsEmail(summary);
+
+    // 3. Format Date for Subject (DD MMM YYYY)
+    const displayDate = new Date(summary.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const subject = `📊 Kottravai Daily Analytics Report - ${displayDate}`;
+
+    // 4. Send Email with Retry Logic
+    console.log(`[DAILY_ANALYTICS] Sending Email to ${recipients.length} recipients...`);
+    const toAddress = recipients.join(',');
+    
+    let emailSent = false;
+    let attempts = 0;
+    let lastError = null;
+
+    while (!emailSent && attempts < 2) {
+      try {
+        attempts++;
+        await sendEmail({
+          to: toAddress,
+          subject: subject,
+          html: htmlContent,
+          type: 'contact' // Use default contact reply-to alias
+        });
+        emailSent = true;
+        console.log('[DAILY_ANALYTICS] Email Sent Successfully');
+      } catch (err) {
+        console.error(`[DAILY_ANALYTICS] SMTP Error on attempt ${attempts}:`, err.message);
+        lastError = err;
+        if (attempts < 2) {
+          console.log('[DAILY_ANALYTICS] Retrying email send in 5 seconds...');
+          await new Promise(res => setTimeout(res, 5000));
+        }
+      }
+    }
+
+    if (!emailSent) {
+      throw lastError;
+    }
+
+    return { success: true, emailSent: true, date: summary.date };
+
+  } catch (error) {
+    console.error('[DAILY_ANALYTICS] === FAILED TO SEND EMAIL ===', error);
+    // Do not crash server, just return failure
+    return { success: false, emailSent: false, error: error.message };
+  }
+};
+
+module.exports = {
+  sendDailyAnalyticsEmail
+};

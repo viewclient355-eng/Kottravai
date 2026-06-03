@@ -79,6 +79,15 @@ verifyConnection().then(isConnected => {
     }
 });
 
+// Init Daily Analytics Job
+let initDailyAnalyticsJob = () => {};
+try {
+    ({ initDailyAnalyticsJob } = require('./jobs/dailyAnalyticsJob'));
+    initDailyAnalyticsJob();
+} catch (e) {
+    console.warn('⚠️ dailyAnalyticsJob not loaded:', e.message);
+}
+
 // --- Performance Cache (Simple In-Memory) ---
 const productCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -923,15 +932,45 @@ app.get('/api/location/pincode/:pincode', async (req, res) => {
             message: err.message,
             stack: err.stack,
             response: err.response?.data
-        });
         res.status(500).json({ error: 'Location lookup failed', details: err.message });
     }
 });
 
 // Analytics tracking: prefer to mount the tracking router if available, otherwise provide a safe fallback
 try {
-    const trackingRoutes = require('./routes/trackingRoutes');
+    // Import tracking router
+    const trackingRoutes = require('./routes/tracking');
     app.use('/api/track', trackingRoutes);
+
+    // Import daily email sender and setup endpoints
+    let generateDailyAnalyticsSummary;
+    let sendDailyAnalyticsEmail;
+    try {
+      ({ generateDailyAnalyticsSummary } = require('./services/dailyAnalyticsService'));
+      ({ sendDailyAnalyticsEmail } = require('./services/dailyEmailSender'));
+    } catch(e) {
+      console.warn('⚠️ Daily analytics services not available:', e.message);
+    }
+
+    app.get('/api/analytics/preview-daily-report', async (req, res) => {
+      try {
+        if (!generateDailyAnalyticsSummary) return res.status(503).json({ error: 'Service Unavailable' });
+        const summary = await generateDailyAnalyticsSummary();
+        res.json(summary);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post('/api/analytics/send-daily-report', async (req, res) => {
+      try {
+        if (!sendDailyAnalyticsEmail) return res.status(503).json({ error: 'Service Unavailable' });
+        const result = await sendDailyAnalyticsEmail();
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
 } catch (e) {
     console.warn('⚠️ trackingRoutes not loaded:', e.message);
     // Fallback: accept posts to /api/track to avoid breaking clients; mimic previous lightweight behaviour
