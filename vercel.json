@@ -20,6 +20,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/analytics/send-daily-report",
+      "schedule": "30 2 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

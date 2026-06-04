@@ -963,7 +963,7 @@ try {
       }
     });
 
-    app.post('/api/analytics/send-daily-report', async (req, res) => {
+    app.all('/api/analytics/send-daily-report', async (req, res) => {
       try {
         if (!sendDailyAnalyticsEmail) return res.status(503).json({ error: 'Service Unavailable' });
         const result = await sendDailyAnalyticsEmail();
