@@ -589,11 +589,12 @@ function buildAggregations(rows) {
     const eventType = String(row['event_type'] || '').trim().toLowerCase();
     const revenue = getSafeNumber(row['order_total']);
     const productId = row['product_id'];
-    const productName = String(row['product_name'] || '').trim();
+    let productName = String(row['product_name'] || '').trim();
 
-    // Ignore erroneous product events where product name is missing
-    if ((eventType === 'purchase_completed' || eventType === 'add_to_cart' || eventType === 'product_view') && productName === '') {
-        return;
+    // DO NOT drop the entire event if productName is empty, because we still need to count the Order and Revenue!
+    // We will just mark the product name as 'Unknown Product' or handle it in the leaderboards.
+    if (!productName) {
+      productName = 'Unknown Product';
     }
 
     let pageUrl = row['page'] || '';
