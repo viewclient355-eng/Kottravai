@@ -91,13 +91,8 @@ exports.trackEvent = async (req, res) => {
       visitorId: payload.visitor_id
     });
 
-    setImmediate(() => {
-      googleSheetsService
-        .populateDashboardSheet()
-        .catch(err =>
-          console.error('[DASHBOARD_REFRESH_ERROR]', err)
-        );
-    });
+    // Vercel Serverless Fix: Do not run heavy background tasks here.
+    // Dashboard is rebuilt via cron or manual trigger.
     
     res.json({ success: true });
   } catch (err) {
@@ -150,13 +145,8 @@ exports.trackBatch = async (req, res) => {
 
     console.log('[RAW_BATCH_WRITTEN]', { count: rows.length });
 
-    setImmediate(() => {
-      googleSheetsService
-        .populateDashboardSheet()
-        .catch(err =>
-          console.error('[DASHBOARD_REFRESH_ERROR]', err)
-        );
-    });
+    // Vercel Serverless Fix: Do not run heavy background tasks here.
+    // Dashboard is rebuilt via cron or manual trigger.
     
     res.json({ success: true, appended: rows.length });
   } catch (err) {
@@ -212,6 +202,17 @@ exports.testWrite = async (req, res) => {
             spreadsheetId: config.spreadsheetId
         });
     } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.rebuildDashboard = async (req, res) => {
+    try {
+        console.log('[MANUAL_REBUILD] Triggering dashboard rebuild...');
+        await googleSheetsService.populateDashboardSheet();
+        res.json({ success: true, message: 'Dashboard rebuilt successfully' });
+    } catch (err) {
+        console.error('[MANUAL_REBUILD_ERROR]', err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 };

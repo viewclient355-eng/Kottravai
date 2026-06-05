@@ -1476,15 +1476,26 @@ async function buildDashboardSheets(s) {
 
   viRows.sort((a, b) => b.revenue - a.revenue || b.healthScoreVal - a.healthScoreVal || b.purchases - a.purchases);
 
+  const sortedDailyRows = [...aggregation.dailyRows].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const todayStats = sortedDailyRows[0] || { visitors: 0, newVisitors: 0, sessions: 0, orders: 0, revenue: 0, purchaseConversionRate: 0 };
+  const yesterdayStats = sortedDailyRows[1] || { visitors: 0, newVisitors: 0, sessions: 0, orders: 0, revenue: 0, purchaseConversionRate: 0 };
+
   const visitorVals = appendMeta([
     ['VISITOR INTELLIGENCE ENGINE'], createEmpty(),
-    ['KPI CARDS', 'Value'],
-    ['Total Visitors', profilesArr.length],
-    ['Returning Visitors', returningCount],
-    ['High Intent Visitors', highIntentCount],
-    ['VIP Customers', vipCount],
-    ['At Risk Customers', atRiskCount],
-    ['Highest Value Visitor', highestValueVisitor],
+    ['OVERALL KPI CARDS', 'Value', '', 'TODAY\'S KPI CARDS', 'Value'],
+    ['Total Visitors', profilesArr.length, '', 'Today\'s Visitors', todayStats.visitors],
+    ['Returning Visitors', returningCount, '', 'Today\'s New Visitors', todayStats.newVisitors],
+    ['High Intent Visitors', highIntentCount, '', 'Today\'s Sessions', todayStats.sessions],
+    ['VIP Customers', vipCount, '', 'Today\'s Orders', todayStats.orders],
+    ['At Risk Customers', atRiskCount, '', 'Today\'s Revenue', formatCurrency(todayStats.revenue)],
+    ['Highest Value Visitor', highestValueVisitor, '', 'Today\'s Conv. Rate', `${(todayStats.purchaseConversionRate * 100).toFixed(2)}%`],
+    createEmpty(),
+    ['YESTERDAY\'S KPI CARDS', 'Value'],
+    ['Yesterday\'s Visitors', yesterdayStats.visitors],
+    ['Yesterday\'s Sessions', yesterdayStats.sessions],
+    ['Yesterday\'s Orders', yesterdayStats.orders],
+    ['Yesterday\'s Revenue', formatCurrency(yesterdayStats.revenue)],
+    ['Yesterday\'s Conv. Rate', `${(yesterdayStats.purchaseConversionRate * 100).toFixed(2)}%`],
     createEmpty(),
     ['TOP VISITORS LEADERBOARD (Top 100)'],
     ['Visitor ID', 'City', 'State', 'Country', 'Sessions', 'Product Views', 'Carts', 'Purchases', 'Revenue', 'Visitor Type', 'Health Score', 'AI Insight'],
