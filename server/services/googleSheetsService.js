@@ -1188,6 +1188,7 @@ function buildAggregations(rows) {
   return {
     totalProductViewsDetected,
     totalProductsAggregated: products.size,
+    products,
     dailyRows,
     weeklyRows,
     monthlyRows,
