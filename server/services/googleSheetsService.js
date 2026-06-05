@@ -1827,6 +1827,7 @@ async function buildDashboardSheets(s) {
   // PHASE 5: CART INTELLIGENCE COMMAND CENTER
   // ============================================================================
   const cartIntelligenceVals = [];
+  const nowMs = new Date().getTime();
   
   const recoveryVisitors = new Map();
   for (const inst of aggregation.cartInstances) {
