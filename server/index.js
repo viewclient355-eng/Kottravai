@@ -2809,18 +2809,10 @@ app.post('/api/auth/send-whatsapp-otp', async (req, res) => {
 
         console.log(`\n📱 [GUEST OTP GENERATED] To: ${phone} | Code: ${otp}\n`);
 
-        try {
-            await sendWhatsAppOTP(phone, otp);
-            console.log('[OTP_WHATSAPP_SEND_SUCCESS] Message accepted by WhatsApp API');
-        } catch (waError) {
-            console.error('[WHATSAPP_ERROR] Failed to send WhatsApp message via API:', waError.message);
-            
-            if (process.env.NODE_ENV === 'production') {
-                return res.status(500).json({ error: 'Unable to send OTP. Please try again.' });
-            } else {
-                console.warn('⚠️ [WARNING] Development Mode: Allowing OTP console fallback despite WhatsApp failure.');
-            }
-        }
+        // Fire-and-forget WhatsApp API to prevent blocking the user response
+        sendWhatsAppOTP(phone, otp)
+            .then(() => console.log('[OTP_WHATSAPP_SEND_SUCCESS] Message accepted by WhatsApp API'))
+            .catch(waError => console.error('[WHATSAPP_ERROR] Failed to send WhatsApp message via API:', waError.message));
 
         if (phone === '9999999999' && process.env.NODE_ENV !== 'production') {
             res.json({ success: true, message: 'Test OTP processed.', test_otp: otp });
