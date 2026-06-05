@@ -176,6 +176,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         analytics.trackEvent('add_to_cart', {
             product_id: product.id,
             product_name: product.name,
+            category: product.category,
             quantity,
             variant: variant?.weight,
             price: variant?.price || product.price

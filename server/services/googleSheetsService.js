@@ -750,9 +750,12 @@ function buildAggregations(rows) {
     if (productId || productName) {
       const pKey = productId || productName;
       if (!products.has(pKey)) {
-        products.set(pKey, { productName: productName || productId, views: 0, carts: 0, purchases: 0, revenue: 0 });
+        products.set(pKey, { productName: productName || productId, category: 'Unknown', views: 0, carts: 0, purchases: 0, revenue: 0 });
       }
       const p = products.get(pKey);
+      
+      const rowCategory = row['category'] || row['Category'];
+      if (rowCategory && p.category === 'Unknown') p.category = rowCategory;
       if (eventType === 'product_view') {
         p.views++;
         totalProductViewsDetected++;
@@ -762,7 +765,7 @@ function buildAggregations(rows) {
         const cKey = `${visitorId}_${pKey}`;
         if (!activeCarts.has(cKey)) {
           const price = parseFloat(row['price'] || row['Price'] || 0) || 0;
-          const category = row['category'] || row['Category'] || 'Unknown';
+          const category = row['category'] || row['Category'] || p.category || 'Unknown';
           const inst = { visitorId, productId: pKey, category, price, addedAt: time, purchasedAt: null };
           cartInstances.push(inst);
           activeCarts.set(cKey, inst);
