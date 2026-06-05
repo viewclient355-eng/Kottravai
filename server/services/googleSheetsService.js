@@ -1828,6 +1828,7 @@ async function buildDashboardSheets(s) {
   // ============================================================================
   const cartIntelligenceVals = [];
   const nowMs = new Date().getTime();
+  const ONE_HOUR = 60 * 60 * 1000;
   
   const recoveryVisitors = new Map();
   for (const inst of aggregation.cartInstances) {
