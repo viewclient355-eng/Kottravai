@@ -1851,6 +1851,7 @@ async function buildDashboardSheets(s) {
   let potentialRev = 0, recoverableRev = 0, lostRev = 0, cartHighIntentCount = 0, cartEligibleCount = 0, totalCartAgeMs = 0;
   const prodOpportunities = new Map();
   const geoOpportunities = new Map();
+  const getProdName = (id) => aggregation.products.get(id)?.productName || id;
   
   Array.from(recoveryVisitors.values()).forEach(r => {
     const vp = r.vp;
@@ -1903,12 +1904,12 @@ async function buildDashboardSheets(s) {
     else if (intent === 'HIGH INTENT' && contactStatus === 'Unreachable') rec = 'Retarget via Ads. Contact unavailable.';
     else if (isEligible) rec = 'Automated recovery sequence eligible.';
   
-    let topProd = Array.from(vp.productCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
-    const prodsViewed = vp.productsViewed ? Array.from(vp.productsViewed).join(', ') : '';
+    let topProd = getProdName(Array.from(vp.productCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown');
+    const prodsViewed = vp.productsViewed ? Array.from(vp.productsViewed).map(getProdName).join(', ') : '';
     const catFav = Array.from(vp.categoryCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
     
     // Group abandoned items to prevent massive strings
-    const uniqueAbandonedProds = Array.from(new Set(r.abandonedItems.map(i => i.productId)));
+    const uniqueAbandonedProds = Array.from(new Set(r.abandonedItems.map(i => getProdName(i.productId))));
     const prodsInCart = uniqueAbandonedProds.join(', ');
     const uniqueCat = Array.from(new Set(r.abandonedItems.map(i => i.category)));
     const catInCart = uniqueCat.join(', ');
@@ -1922,7 +1923,7 @@ async function buildDashboardSheets(s) {
   
     r.abandonedItems.forEach(inst => {
       if (!prodOpportunities.has(inst.productId)) {
-        prodOpportunities.set(inst.productId, { product: inst.productId, category: inst.category, carts: 0, val: 0, ageSum: 0, contactable: 0, highIntent: 0 });
+        prodOpportunities.set(inst.productId, { product: getProdName(inst.productId), category: inst.category, carts: 0, val: 0, ageSum: 0, contactable: 0, highIntent: 0 });
       }
       const po = prodOpportunities.get(inst.productId);
       po.carts++;
@@ -1944,7 +1945,7 @@ async function buildDashboardSheets(s) {
       if (intent === 'HIGH INTENT') go.highIntent++;
       
       r.abandonedItems.forEach(inst => {
-        go.topProds.set(inst.productId, (go.topProds.get(inst.productId) || 0) + 1);
+        go.topProds.set(getProdName(inst.productId), (go.topProds.get(getProdName(inst.productId)) || 0) + 1);
       });
     }
   });
