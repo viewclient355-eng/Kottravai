@@ -1875,13 +1875,13 @@ async function buildDashboardSheets(s) {
     let intent = 'LOW INTENT';
     if ((vp.productViews > 5 && r.cartValue > 500) || (vp.addToCarts >= 2) || (vp.sessions.size > 3 && vp.productViews > 5) || (vp.productViews > 10)) {
       intent = 'HIGH INTENT';
-      highIntentCount++;
+      cartHighIntentCount++;
     } else if ((vp.productViews >= 3 && vp.productViews <= 5) || (vp.sessions.size >= 2 && vp.sessions.size <= 3)) {
       intent = 'MEDIUM INTENT';
     }
   
     const isEligible = (contactStatus === 'Contactable' && cartAgeHours >= 24);
-    if (isEligible) eligibleCount++;
+    if (isEligible) cartEligibleCount++;
   
     let priority = '🟢 Low';
     if (r.cartValue > 1000 && cartAgeHours > 24) priority = '🔴 Critical';
@@ -1958,8 +1958,8 @@ async function buildDashboardSheets(s) {
   cartIntelligenceVals.push(
     ['CART INTELLIGENCE COMMAND CENTER'], createEmpty(),
     ['=== SECTION 1: EXECUTIVE KPI CARDS ===', '', ''],
-    ['Total Abandoned Carts', totalAbandonedCarts, '', 'High Intent Visitors', highIntentCount],
-    ['Contactable Visitors', totalContactable, '', 'Recovery Eligible Visitors', eligibleCount],
+    ['Total Abandoned Carts', totalAbandonedCarts, '', 'High Intent Visitors', cartHighIntentCount],
+    ['Contactable Visitors', totalContactable, '', 'Recovery Eligible Visitors', cartEligibleCount],
     ['Unreachable Visitors', totalUnreachable, '', 'Average Cart Age (Hours)', ndy(avgCartAgeHours)],
     ['Potential Revenue Lost', formatCurrency(potentialRev), '', 'Top Abandoned Product', topAbandonedProd],
     ['Recoverable Revenue (<7 Days)', formatCurrency(recoverableRev), '', 'Top Revenue Opportunity', topRevProd],
