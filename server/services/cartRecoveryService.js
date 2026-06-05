@@ -3,61 +3,68 @@ const trackingUtils = require('../utils/trackingUtils');
 const whatsappProvider = require('./whatsapp/provider');
 const googleSheetsService = require('./googleSheetsService');
 
-// State tracking for DRY RUN
 const IS_DRY_RUN = true; 
 
-const SHEET_NAME = 'Cart Recovery Analytics';
+const VALIDATION_SHEET = 'Recovery Validation';
+const PREVIEW_SHEET = 'Recovery Preview Queue';
+const PERFORMANCE_SHEET = 'WhatsApp Recovery Performance';
+
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * ONE_HOUR;
+const MAX_LIVE_SENDS_PER_DAY = 10;
 
-function getStrategy(ageHours, cartValue, isHighIntent) {
-  if (ageHours >= 72) {
-    if (cartValue > 500 || isHighIntent) {
-      return { id: 'C', name: 'Discount Coupon Offer', coupon: 'RECOVER10' };
-    }
-  }
-  if (ageHours >= 48) {
-    return { id: 'B', name: 'Personalized Follow-Up', coupon: null };
-  }
-  if (ageHours >= 24) {
-    return { id: 'A', name: 'Friendly Reminder', coupon: null };
-  }
-  return null;
+// Phase 5: A/B Templates
+const TEMPLATES = [
+  { name: 'Template A', weight: 40, strategy: 'Friendly Reminder', generate: (p) => `Hi there! We noticed you left ${p} in your cart. Still interested? Reply YES to continue.` },
+  { name: 'Template B', weight: 40, strategy: 'Personalized Follow-Up', generate: (p) => `Hey! Your ${p} is flying off the shelves. We've saved it for you, but hurry back!` },
+  { name: 'Template C', weight: 20, strategy: 'Discount Offer', generate: (p, c) => `Special offer just for you! Complete your purchase of ${p} using code ${c} for an exclusive discount.` }
+];
+
+function selectTemplateByWeight() {
+  const rand = Math.random() * 100;
+  if (rand < 40) return TEMPLATES[0];
+  if (rand < 80) return TEMPLATES[1];
+  return TEMPLATES[2];
 }
 
-/**
- * Main cart recovery job. 
- * Reads raw events, builds aggregation, matches against recovery history, triggers strategies.
- */
+function getConfidence(value, views) {
+  if (value >= 1000 && views > 5) return 'High';
+  if ((value >= 300 && value < 1000) || views > 3) return 'Medium';
+  return 'Low';
+}
+
+function generateCoupon(cartValue, confidence) {
+  if (cartValue >= 500 || confidence === 'High') {
+    // Generate a simple mock coupon
+    return 'SAVE' + Math.floor(Math.random() * 10 + 10);
+  }
+  return '';
+}
+
 async function runRecoveryJob() {
-  console.log('[CART_RECOVERY] Starting Agentic Cart Recovery Job... (DRY_RUN=' + IS_DRY_RUN + ')');
+  console.log('[CART_RECOVERY] Starting Phase 5 Staged Recovery Job...');
   
   const s = await googleSheetsService.sheets();
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
   // 1. Fetch current aggregation
-  console.log('[CART_RECOVERY] Fetching current site aggregation...');
   const agg = await googleSheetsService.getAggregations();
   
-  // 2. Fetch existing Recovery History to ensure exclusions
-  console.log('[CART_RECOVERY] Fetching existing recovery logs...');
+  // 2. Fetch existing Recovery History
   let existingLogs = [];
   try {
-    const res = await s.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${SHEET_NAME}!A2:Z` });
+    const res = await s.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${VALIDATION_SHEET}!A2:Z` });
     existingLogs = res.data.values || [];
   } catch (e) {
-    console.log('[CART_RECOVERY] No existing recovery sheet found. It will be created.');
+    // ignore
   }
 
-  // Build lookup maps for exclusions
-  // Format: VisitorID_ProductID -> count / max level sent
   const recoveryHistory = new Map();
   existingLogs.forEach(row => {
-    // VisitorID(0), Product(5), Status(10), Strategy(11)
     const vId = row[0];
-    const pName = row[5];
-    const status = row[10];
-    const strat = row[11];
+    const pName = row[1];
+    const strat = row[5];
+    const status = row[7];
     
     if (vId && pName) {
       const key = `${vId}_${pName}`;
@@ -65,126 +72,190 @@ async function runRecoveryJob() {
       const hist = recoveryHistory.get(key);
       hist.attempts += 1;
       hist.lastStrategy = strat;
-      if (row[15] === 'TRUE' || status === 'Recovered') hist.recovered = true;
+      if (status === 'Recovered') hist.recovered = true;
     }
   });
 
   const now = Date.now();
-  const newRecoveryRows = [];
+  const validationRows = [];
+  const previewRows = [];
+  const performanceRows = [];
+  let messagesSent = 0;
 
   // 3. Scan Active Carts
-  let messagesSent = 0;
   for (const inst of agg.cartInstances) {
-    // Only looking at abandoned carts
-    if (inst.purchasedAt) continue;
-
     const ageMs = now - inst.addedAt;
     const ageHours = ageMs / ONE_HOUR;
-
-    // ELIGIBILITY WINDOW: >= 24h and <= 7 Days
-    if (ageHours < 24 || ageHours > (7 * 24)) continue;
-
+    
     const visitor = agg.visitorProfiles.find(v => v.visitorId === inst.visitorId);
-    if (!visitor || !visitor.phone) continue; // Cannot recover without phone
+    if (!visitor) continue;
+
+    const phoneFound = visitor.phone ? visitor.phone : 'No';
+    const confidence = getConfidence(inst.price, visitor.productViews);
 
     const key = `${inst.visitorId}_${inst.productId}`;
     const hist = recoveryHistory.get(key) || { attempts: 0, lastStrategy: null, recovered: false };
 
-    // EXCLUSIONS
-    if (hist.recovered) continue;
-    if (hist.attempts >= 2) continue; // Max 2 attempts
+    // Validation Checks
+    let status = 'Valid';
+    let notes = '';
     
-    const isHighIntent = visitor.addToCarts > 2 || visitor.orders > 0;
-    const strategy = getStrategy(ageHours, inst.price, isHighIntent);
+    const isInvalidPhone = phoneFound === 'No' || phoneFound.length < 10;
 
-    if (!strategy) continue;
-    
-    // Prevent resending the same strategy (e.g. don't send two "Friendly Reminders")
-    if (hist.lastStrategy && hist.lastStrategy.includes(strategy.name)) continue;
-    
-    // DRY RUN LOGGING
-    console.log(`[CART_RECOVERY_IDENTIFIED] Eligible cart: ${key} | Age: ${Math.round(ageHours)}h | Strategy: ${strategy.name}`);
-    
-    let waSent = 'FALSE';
-    if (!IS_DRY_RUN) {
-       console.log(`[WHATSAPP_RECOVERY_SENT] Sending WhatsApp to ${visitor.phone}`);
-       // await whatsappProvider.sendRecoveryMessage(visitor.phone, strategy.name, inst.productId, strategy.coupon);
-       waSent = 'TRUE';
+    if (inst.purchasedAt) {
+      status = 'Purchased - Excluded';
+      notes = 'User already purchased this item.';
+    } else if (ageHours > (7 * 24)) {
+      status = 'Old Cart - Excluded';
+      notes = `Cart age is > 7 days (${Math.round(ageHours)}h).`;
+    } else if (ageHours < 24) {
+      status = 'Too Fresh - Excluded';
+      notes = `Cart age is < 24 hours (${Math.round(ageHours)}h).`;
+    } else if (hist.recovered) {
+      status = 'Already Recovered - Excluded';
+      notes = 'User recovered cart previously.';
+    } else if (hist.attempts >= 2) {
+      status = 'Max Attempts - Excluded';
+      notes = 'Max 2 messages reached.';
+    } else if (isInvalidPhone) {
+      status = 'Missing Phone - Excluded';
+      notes = 'No phone number captured.';
+    } else {
+      status = 'Sent';
+      notes = 'Passed all validation checks.';
     }
 
-    if (strategy.coupon) {
-      console.log(`[COUPON_GENERATED] Coupon ${strategy.coupon} generated for ${visitor.phone}`);
+    let strategy = 'None';
+    let templateName = 'None';
+    let couponCode = '';
+    let msgBody = '';
+    let sendStatus = 'Not Sent';
+
+    // Phase 5 Logic - Only valid items get preview/sent
+    if (status === 'Sent') {
+      const template = selectTemplateByWeight();
+      strategy = template.strategy;
+      templateName = template.name;
+      couponCode = generateCoupon(inst.price, confidence);
+      msgBody = template.generate(inst.productId, couponCode); // Simplified using ID as name for mock
+
+      let eligibleForSend = 'No';
+      if (confidence === 'High' && inst.price >= 500 && ageHours >= 24 && ageHours <= 72) {
+        eligibleForSend = 'Yes';
+      }
+
+      // Live Send Limiter Logic
+      if (eligibleForSend === 'Yes' && messagesSent < MAX_LIVE_SENDS_PER_DAY && !IS_DRY_RUN) {
+        // Attempt live send (Mocked to Queued per requirement when no provider)
+        messagesSent++;
+        sendStatus = 'Queued'; 
+        console.log(`[WHATSAPP_MESSAGE_SENT] Template: ${templateName} | Cart: ${inst.price}`);
+      } else {
+        sendStatus = 'Preview Generated';
+        console.log(`[RECOVERY_PREVIEW_GENERATED] Visitor: ${inst.visitorId} | Template: ${templateName}`);
+      }
+
+      // Add to Preview Queue
+      previewRows.push([
+        inst.visitorId,
+        phoneFound,
+        inst.productId,
+        inst.price,
+        Math.round(ageHours * 10) / 10,
+        strategy,
+        templateName,
+        couponCode,
+        msgBody,
+        confidence,
+        eligibleForSend,
+        new Date().toISOString()
+      ]);
+
+      // Add to Performance Tracker if it triggered a phase action
+      performanceRows.push([
+        new Date().toISOString().substring(0, 10), // Date
+        strategy,
+        templateName,
+        sendStatus,
+        new Date().toISOString(), // Sent At
+        '', // Recovered Order ID
+        0,  // Recovered Revenue
+        ''  // Recovery Time Hours
+      ]);
     }
 
-    // Append to sheet array
-    const createdAt = new Date(inst.addedAt).toISOString();
-    const sentAt = new Date().toISOString();
-
-    newRecoveryRows.push([
+    // Always log to Validation Sheet for auditing
+    validationRows.push([
       inst.visitorId,
-      visitor.phone,
-      visitor.country,
-      visitor.state,
-      visitor.city,
       inst.productId,
-      inst.category,
       inst.price,
-      createdAt,
       Math.round(ageHours * 10) / 10,
-      'Sent',
-      strategy.name,
-      waSent,
-      sentAt,
-      strategy.coupon || 'N/A',
-      'FALSE', // Recovered
-      0        // Recovered Revenue
+      phoneFound,
+      strategy,
+      confidence,
+      status,
+      notes
     ]);
-    
-    messagesSent++;
   }
 
-  // 4. Update the Google Sheet
-  if (newRecoveryRows.length > 0) {
-    console.log(`[CART_RECOVERY] Appending ${newRecoveryRows.length} rows to Google Sheets...`);
-    
-    if (existingLogs.length === 0) {
-       // Setup KPI Formulas and Headers
-       const kpisAndHeaders = [
-         ['CART RECOVERY KPIs', '', '', '', ''],
-         ['Recovered Revenue', '=SUMIF(P9:P, "TRUE", H9:H)', 'Recovered Orders', '=COUNTIF(P9:P, "TRUE")'],
-         ['Recovery Rate', '=IF(COUNTA(A9:A)>0, COUNTIF(P9:P, "TRUE")/COUNTA(A9:A), 0)', 'Pending Recoveries', '=COUNTIF(K9:K, "Sent")'],
-         ['High Value Recoveries', '=COUNTIFS(P9:P, "TRUE", H9:H, ">500")', '', ''],
-         ['', '', '', '', ''],
-         ['', '', '', '', ''],
-         [
-           'Visitor ID', 'Phone Number', 'Country', 'State', 'City', 'Product Name', 'Category', 
-           'Cart Value', 'Cart Created At', 'Cart Age Hours', 'Recovery Status', 'Recovery Strategy', 
-           'WhatsApp Sent', 'WhatsApp Sent At', 'Coupon Issued', 'Recovered', 'Recovered Revenue'
-         ]
-       ];
-       await s.spreadsheets.values.update({
-         spreadsheetId: SHEET_ID,
-         range: `${SHEET_NAME}!A1:Q7`,
-         valueInputOption: 'USER_ENTERED',
-         requestBody: { values: kpisAndHeaders }
-       });
-       
-       // Format Recovery Rate as percentage
-       // Note: formatting requires batchUpdate which we skip to save API calls, formulas will handle the raw values
-    }
+  // 4. Update the Google Sheets
+  if (validationRows.length > 0) {
+    const ensureHeaders = async (sheetName, headersArray) => {
+      try {
+         await s.spreadsheets.values.update({
+           spreadsheetId: SHEET_ID,
+           range: `${sheetName}!A1:Z1`,
+           valueInputOption: 'USER_ENTERED',
+           requestBody: { values: [headersArray] }
+         });
+      } catch (e) {
+         // ignore
+      }
+    };
 
-    // Append rows
+    // Update Validation
+    await ensureHeaders(VALIDATION_SHEET, ['Visitor ID', 'Product Name', 'Cart Value', 'Cart Age', 'Phone Number Found', 'Recovery Strategy', 'Recovery Confidence', 'Validation Status', 'Validation Notes']);
     await s.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A8:Q`,
+      range: `${VALIDATION_SHEET}!A2:I`,
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: newRecoveryRows }
+      requestBody: { values: validationRows }
     });
+
+    // Update Preview Queue
+    if (previewRows.length > 0) {
+      await ensureHeaders(PREVIEW_SHEET, ['Visitor ID', 'Phone Number', 'Product Name', 'Cart Value', 'Cart Age', 'Recovery Strategy', 'Template', 'Coupon Code', 'Generated Message', 'Confidence Score', 'Eligible For Send', 'Created At']);
+      await s.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: `${PREVIEW_SHEET}!A2:L`,
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: previewRows }
+      });
+    }
+
+    // Update Performance
+    if (performanceRows.length > 0) {
+      await ensureHeaders(PERFORMANCE_SHEET, ['Date', 'Recovery Strategy', 'Template', 'Status', 'Sent At', 'Recovered Order ID', 'Recovered Revenue', 'Recovery Time Hours']);
+      await s.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: `${PERFORMANCE_SHEET}!A2:H`,
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: performanceRows }
+      });
+    }
   }
 
-  console.log('[RECOVERY_SUCCESS] Job completed successfully. Messages processed:', messagesSent);
-  return { success: true, processed: messagesSent };
+  console.log(`[RECOVERY_VALIDATION_COMPLETE] Phase 5 Execution completed. Preview Generated: ${previewRows.length} | Sent (Live): ${messagesSent}`);
+
+  return {
+    messagesSent,
+    previewsGenerated: previewRows.length,
+    validationRows,
+    performanceRows
+  };
 }
 
 module.exports = {

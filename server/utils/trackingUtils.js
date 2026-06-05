@@ -5,6 +5,7 @@ exports.sanitizeTrackingPayload = (p) => {
   const allowed = [
     'event_type','event_name','page','page_url','timestamp','user_agent','ua','browser','browser_name','device','device_type',
     'screen_size','screen_width','screen_height','referrer','session_id','visitor_id','visit_count','utm_source','utm_medium','utm_campaign',
+    'utm_content', 'utm_term',
     'product_id', 'product_name', 'category', 'price', 'quantity', 'order_id', 'order_total', 'payment_method', 'revenue',
     'metadata'
   ];
@@ -16,6 +17,13 @@ exports.sanitizeTrackingPayload = (p) => {
   for (const k of allowed) {
     if (merged[k] !== undefined && merged[k] !== null) out[k] = typeof merged[k] === 'string' ? merged[k].trim() : merged[k];
   }
+  
+  // UTM Fallback Logic
+  const utms = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+  for (const u of utms) {
+    if (!out[u] || out[u].trim() === '') out[u] = '(not set)';
+  }
+
   // Ensure timestamp normalized
   out.timestamp = out.timestamp || new Date().toISOString();
   return out;
