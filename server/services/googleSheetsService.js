@@ -164,6 +164,7 @@ const RECOVERY_PREVIEW_SHEET = 'Recovery Preview Queue';
 const WHATSAPP_RECOVERY_PERFORMANCE_SHEET = 'WhatsApp Recovery Performance';
 const ATTRIBUTION_ANALYTICS_SHEET = 'Attribution Analytics';
 const PRODUCT_RECOMMENDATION_SHEET = 'Product Recommendation Intelligence';
+const CART_INTELLIGENCE_SHEET = 'Cart Intelligence Command Center';
 const EXECUTIVE_COMMAND_CENTER_SHEET = 'Executive Command Center';
 
 const DATA_SHEET_ORDER = [
@@ -176,6 +177,7 @@ const DATA_SHEET_ORDER = [
   CONVERSION_FUNNEL_SHEET,
   GEOGRAPHY_ANALYTICS_SHEET,
   USER_BEHAVIOR_SHEET,
+  CART_INTELLIGENCE_SHEET,
   EXECUTIVE_COMMAND_CENTER_SHEET,
   DAILY_REPORT_SHEET,
   WEEKLY_REPORT_SHEET,
@@ -1821,6 +1823,196 @@ async function buildDashboardSheets(s) {
   // PHASE 6: EXECUTIVE COMMAND CENTER
   // ============================================================================
   console.log('[EXECUTIVE_COMMAND_CENTER_GENERATED] Compiling master metrics...');
+  // ============================================================================
+  // PHASE 5: CART INTELLIGENCE COMMAND CENTER
+  // ============================================================================
+  const cartIntelligenceVals = [];
+  
+  const recoveryVisitors = new Map();
+  for (const inst of aggregation.cartInstances) {
+    if (inst.purchasedAt) continue; 
+    const vp = aggregation.visitorProfiles.find(v => v.visitorId === inst.visitorId);
+    if (!vp) continue;
+  
+    if (!recoveryVisitors.has(inst.visitorId)) {
+      recoveryVisitors.set(inst.visitorId, { vp, abandonedItems: [], cartValue: 0, oldestCartMs: nowMs });
+    }
+  
+    const r = recoveryVisitors.get(inst.visitorId);
+    r.abandonedItems.push(inst);
+    r.cartValue += inst.price || 0;
+    if (inst.addedAt < r.oldestCartMs) r.oldestCartMs = inst.addedAt;
+  }
+  
+  const queueRows = [];
+  let totalAbandonedCarts = 0, totalContactable = 0, totalUnreachable = 0;
+  let potentialRev = 0, recoverableRev = 0, lostRev = 0, cartHighIntentCount = 0, cartEligibleCount = 0, totalCartAgeMs = 0;
+  const prodOpportunities = new Map();
+  const geoOpportunities = new Map();
+  
+  Array.from(recoveryVisitors.values()).forEach(r => {
+    const vp = r.vp;
+    totalAbandonedCarts++;
+    
+    const cartAgeMs = nowMs - r.oldestCartMs;
+    const cartAgeHours = cartAgeMs / ONE_HOUR;
+    const cartAgeDays = cartAgeHours / 24;
+    totalCartAgeMs += cartAgeMs;
+  
+    const phoneAvailable = vp.phone ? 'Yes' : 'No';
+    const emailAvailable = vp.email ? 'Yes' : 'No';
+    const contactStatus = (vp.phone || vp.email) ? 'Contactable' : 'Unreachable';
+    
+    if (contactStatus === 'Contactable') totalContactable++;
+    else totalUnreachable++;
+  
+    potentialRev += r.cartValue;
+    if (cartAgeDays < 7) recoverableRev += r.cartValue;
+    else lostRev += r.cartValue;
+  
+    let intent = 'LOW INTENT';
+    if ((vp.productViews > 5 && r.cartValue > 500) || (vp.addToCarts >= 2) || (vp.sessions.size > 3 && vp.productViews > 5) || (vp.productViews > 10)) {
+      intent = 'HIGH INTENT';
+      highIntentCount++;
+    } else if ((vp.productViews >= 3 && vp.productViews <= 5) || (vp.sessions.size >= 2 && vp.sessions.size <= 3)) {
+      intent = 'MEDIUM INTENT';
+    }
+  
+    const isEligible = (contactStatus === 'Contactable' && cartAgeHours >= 24);
+    if (isEligible) eligibleCount++;
+  
+    let priority = '🟢 Low';
+    if (r.cartValue > 1000 && cartAgeHours > 24) priority = '🔴 Critical';
+    else if (r.cartValue > 500 && intent === 'HIGH INTENT') priority = '🟠 High';
+    else if (intent === 'MEDIUM INTENT') priority = '🟡 Medium';
+  
+    let conf = 0;
+    if (intent === 'HIGH INTENT') conf += 40;
+    if (intent === 'MEDIUM INTENT') conf += 20;
+    if (contactStatus === 'Contactable') conf += 30;
+    if (r.cartValue > 1000) conf += 30;
+    else if (r.cartValue > 500) conf += 15;
+    if (vp.sessions.size > 3) conf += 10;
+    if (conf > 100) conf = 100;
+  
+    let rec = 'Monitor Visitor';
+    if (priority === '🔴 Critical') rec = 'Contact Immediately. Offer Discount.';
+    else if (priority === '🟠 High') rec = 'High Value Opportunity. Send Recovery Msg.';
+    else if (intent === 'HIGH INTENT' && contactStatus === 'Unreachable') rec = 'Retarget via Ads. Contact unavailable.';
+    else if (isEligible) rec = 'Automated recovery sequence eligible.';
+  
+    let topProd = Array.from(vp.productCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
+    const prodsViewed = vp.productsViewed ? Array.from(vp.productsViewed).join(', ') : '';
+    const catFav = Array.from(vp.categoryCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
+    
+    // Group abandoned items to prevent massive strings
+    const uniqueAbandonedProds = Array.from(new Set(r.abandonedItems.map(i => i.productId)));
+    const prodsInCart = uniqueAbandonedProds.join(', ');
+    const uniqueCat = Array.from(new Set(r.abandonedItems.map(i => i.category)));
+    const catInCart = uniqueCat.join(', ');
+    const daysSinceLast = Math.max(0, Math.floor((nowMs - vp.lastVisit) / (1000 * 60 * 60 * 24)));
+    const daysActive = Math.max(1, Math.ceil((vp.lastVisit - vp.firstVisit) / (1000 * 60 * 60 * 24)));
+  
+    queueRows.push({
+      vp, r, cartAgeHours, cartAgeDays, phoneAvailable, emailAvailable, contactStatus,
+      isEligible, intent, priority, conf, rec, topProd, prodsViewed, catFav, prodsInCart, catInCart, daysSinceLast, daysActive
+    });
+  
+    r.abandonedItems.forEach(inst => {
+      if (!prodOpportunities.has(inst.productId)) {
+        prodOpportunities.set(inst.productId, { product: inst.productId, category: inst.category, carts: 0, val: 0, ageSum: 0, contactable: 0, highIntent: 0 });
+      }
+      const po = prodOpportunities.get(inst.productId);
+      po.carts++;
+      po.val += inst.price || 0;
+      po.ageSum += (nowMs - inst.addedAt);
+      if (contactStatus === 'Contactable') po.contactable++;
+      if (intent === 'HIGH INTENT') po.highIntent++;
+    });
+  
+    if (vp.city && vp.city !== 'Unknown') {
+      if (!geoOpportunities.has(vp.city)) {
+        geoOpportunities.set(vp.city, { city: vp.city, state: vp.state, country: vp.country, visitors: 0, carts: 0, val: 0, contactable: 0, highIntent: 0, topProds: new Map() });
+      }
+      const go = geoOpportunities.get(vp.city);
+      go.visitors++;
+      go.carts++; 
+      go.val += r.cartValue;
+      if (contactStatus === 'Contactable') go.contactable++;
+      if (intent === 'HIGH INTENT') go.highIntent++;
+      
+      r.abandonedItems.forEach(inst => {
+        go.topProds.set(inst.productId, (go.topProds.get(inst.productId) || 0) + 1);
+      });
+    }
+  });
+  
+  queueRows.sort((a,b) => b.conf - a.conf || b.r.cartValue - a.r.cartValue || b.vp.sessions.size - a.vp.sessions.size);
+  const avgCartAgeHours = totalAbandonedCarts > 0 ? (totalCartAgeMs / totalAbandonedCarts) / ONE_HOUR : 0;
+  const topAbandonedProd = Array.from(prodOpportunities.values()).sort((a,b)=>b.carts - a.carts)[0]?.product || 'None';
+  const topRevProd = Array.from(prodOpportunities.values()).sort((a,b)=>b.val - a.val)[0]?.product || 'None';
+  const topRecovCity = Array.from(geoOpportunities.values()).sort((a,b)=>b.val - a.val)[0]?.city || 'None';
+  
+  cartIntelligenceVals.push(
+    ['CART INTELLIGENCE COMMAND CENTER'], createEmpty(),
+    ['=== SECTION 1: EXECUTIVE KPI CARDS ===', '', ''],
+    ['Total Abandoned Carts', totalAbandonedCarts, '', 'High Intent Visitors', highIntentCount],
+    ['Contactable Visitors', totalContactable, '', 'Recovery Eligible Visitors', eligibleCount],
+    ['Unreachable Visitors', totalUnreachable, '', 'Average Cart Age (Hours)', ndy(avgCartAgeHours)],
+    ['Potential Revenue Lost', formatCurrency(potentialRev), '', 'Top Abandoned Product', topAbandonedProd],
+    ['Recoverable Revenue (<7 Days)', formatCurrency(recoverableRev), '', 'Top Revenue Opportunity', topRevProd],
+    ['Lost Revenue (>7 Days)', formatCurrency(lostRev), '', 'Top Recovery City', topRecovCity],
+    createEmpty(),
+    ['=== SECTION 2: TOP RECOVERY OPPORTUNITIES ==='],
+    ['Product Name', 'Category', 'Abandoned Carts', 'Total Cart Value', 'Average Cart Age (Hours)', 'Contactable Visitors', 'High Intent Visitors', 'Potential Revenue', 'Priority', 'Recommendation']
+  );
+  
+  Array.from(prodOpportunities.values()).sort((a,b)=>b.val - a.val).slice(0,50).forEach(po => {
+    let pPri = '🟢 Low', pRec = 'Monitor';
+    if (po.val > 5000) { pPri = '🔴 Critical'; pRec = 'Launch Recovery Campaign'; }
+    else if (po.val > 1000) { pPri = '🟠 High'; pRec = 'Targeted Email Recovery'; }
+    cartIntelligenceVals.push([
+      po.product, po.category, po.carts, formatCurrency(po.val), formatCurrency((po.ageSum / po.carts) / ONE_HOUR), po.contactable, po.highIntent, formatCurrency(po.val), pPri, pRec
+    ]);
+  });
+  
+  cartIntelligenceVals.push(createEmpty(), ['=== SECTION 3: VISITOR RECOVERY QUEUE ===']);
+  cartIntelligenceVals.push([
+    'Visitor ID', 'IP Address', 'Country', 'State', 'City', 'Device', 'Browser',
+    'First Seen', 'Last Seen', 'Days Since Last Visit', 'Total Visits', 'Total Sessions',
+    'Total Page Views', 'Total Product Views', 'Most Viewed Product', 'Products Viewed',
+    'Product In Cart', 'Product Category', 'Quantity', 'Cart Value', 'Cart Age Hours', 'Cart Age Days',
+    'Phone Available', 'Email Available', 'Contact Status', 'Recovery Eligible', 'Confidence Score', 'Recovery Priority', 'Recovery Strategy', 'Recommendation'
+  ]);
+  queueRows.forEach(q => {
+    cartIntelligenceVals.push([
+      q.vp.visitorId, 'Hidden', q.vp.country, q.vp.state, q.vp.city, q.vp.device, q.vp.browser,
+      new Date(q.vp.firstVisit).toISOString(), new Date(q.vp.lastVisit).toISOString(), q.daysSinceLast,
+      q.vp.sessions.size, q.vp.sessions.size, q.vp.pageViews, q.vp.productViews, q.topProd, q.prodsViewed,
+      q.prodsInCart, q.catInCart, q.r.abandonedItems.length, formatCurrency(q.r.cartValue), formatCurrency(q.cartAgeHours), formatCurrency(q.cartAgeDays),
+      q.phoneAvailable, q.emailAvailable, q.contactStatus, q.isEligible ? 'Yes' : 'No', q.conf, q.priority, q.intent, q.rec
+    ]);
+  });
+
+  cartIntelligenceVals.push(createEmpty(), ['=== SECTION 4: PRODUCT INTEREST ANALYSIS ===']);
+  cartIntelligenceVals.push(['Visitor ID', 'City', 'Country', 'Products Viewed', 'Most Viewed Product', 'Product Views', 'Favorite Category', 'Cart Product', 'Purchase Status']);
+  queueRows.forEach(q => {
+    cartIntelligenceVals.push([q.vp.visitorId, q.vp.city, q.vp.country, q.prodsViewed, q.topProd, q.vp.productViews, q.catFav, q.prodsInCart, 'Abandoned']);
+  });
+
+  cartIntelligenceVals.push(createEmpty(), ['=== SECTION 5: GEOGRAPHY RECOVERY ANALYSIS ===']);
+  cartIntelligenceVals.push(['City', 'State', 'Country', 'Visitors', 'Abandoned Carts', 'Potential Revenue', 'Contactable Visitors', 'High Intent Visitors', 'Top Product', 'Recovery Opportunity Score']);
+  Array.from(geoOpportunities.values()).sort((a,b)=>b.val - a.val).slice(0,50).forEach(go => {
+    const geoTopProd = Array.from(go.topProds.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
+    cartIntelligenceVals.push([go.city, go.state, go.country, go.visitors, go.carts, formatCurrency(go.val), go.contactable, go.highIntent, geoTopProd, (go.highIntent * 10) + (go.contactable * 5)]);
+  });
+
+  cartIntelligenceVals.push(createEmpty(), ['=== SECTION 6: AI RECOVERY RECOMMENDATIONS ===']);
+  queueRows.slice(0, 50).forEach(q => {
+    let msg = `Visitor ${q.vp.visitorId}\\nCity: ${q.vp.city}\\nVisits: ${q.vp.sessions.size}\\nProduct Views: ${q.vp.productViews}\\nCart Value: ₹${formatCurrency(q.r.cartValue)}\\nCart Age: ${formatCurrency(q.cartAgeDays)} Days\\nRecommendation:\\n🔥 ${q.intent}\\n${q.rec}`;
+    cartIntelligenceVals.push([msg]);
+  });
+
   const execCommandCenterVals = [];
   const waRows = await fetchWhatsAppPerformance(s);
   let totalRecoveredRev = 0;
@@ -1971,6 +2163,7 @@ async function buildDashboardSheets(s) {
     { sheet: WEEKLY_REPORT_SHEET, values: weeklyVals },
     { sheet: MONTHLY_REPORT_SHEET, values: monthlyVals },
     { sheet: LEAD_ANALYTICS_SHEET, values: leadVals },
+    { sheet: CART_INTELLIGENCE_SHEET, values: cartIntelligenceVals },
     { sheet: EXECUTIVE_COMMAND_CENTER_SHEET, values: execCommandCenterVals }
   ];
 
