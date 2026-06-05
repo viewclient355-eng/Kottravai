@@ -1412,15 +1412,101 @@ async function buildDashboardSheets(s) {
     ['Purchase Completed', ndy(aggregation.globalFunnel.purchases), formatPercent(aggregation.globalFunnel.checkoutStarted > 0 ? (aggregation.globalFunnel.checkoutStarted - aggregation.globalFunnel.purchases)/aggregation.globalFunnel.checkoutStarted : 0), formatPercent(aggregation.globalFunnel.checkoutStarted > 0 ? aggregation.globalFunnel.purchases/aggregation.globalFunnel.checkoutStarted : 0)]
   ]);
 
-  // 7. VISITOR INTELLIGENCE
+  // 7. VISITOR INTELLIGENCE ENGINE
+  let vipCount = 0, highIntentCount = 0, atRiskCount = 0, returningCount = 0, customersCount = 0;
+  let topRevenue = 0, highestValueVisitor = 'None';
+  let viRows = [];
+
+  const nowTime = Date.now();
+  const profilesArr = Array.from(aggregation.visitorProfiles.values());
+
+  profilesArr.forEach(vp => {
+    const daysActive = Math.max(1, Math.ceil((vp.lastVisit - vp.firstVisit) / (1000 * 60 * 60 * 24)));
+    const daysSinceLast = Math.floor((nowTime - vp.lastVisit) / (1000 * 60 * 60 * 24));
+    
+    let visitorType = 'New Visitor';
+    if (vp.orders >= 3 || vp.revenue > 5000) { visitorType = 'VIP Customer'; vipCount++; }
+    else if (vp.orders > 0 && daysSinceLast > 90) { visitorType = 'At Risk Customer'; atRiskCount++; }
+    else if (vp.orders > 1) { visitorType = 'Repeat Customer'; customersCount++; }
+    else if (vp.orders === 1) { visitorType = 'Customer'; customersCount++; }
+    else if (vp.addToCarts > 0 || vp.productViews >= 5) { visitorType = 'High Intent Visitor'; highIntentCount++; }
+    else if (vp.sessions.size > 1 || daysActive > 1) { visitorType = 'Returning Visitor'; returningCount++; }
+
+    const healthScoreVal = (vp.revenue * 0.5) + (vp.orders * 10) + (vp.addToCarts * 5) + (vp.productViews * 1);
+    let healthScore = 'Needs Attention';
+    if (healthScoreVal > 500) healthScore = 'Excellent';
+    else if (healthScoreVal > 50) healthScore = 'Good';
+    else if (healthScoreVal < 5) healthScore = 'Critical';
+
+    let insight = '';
+    if (visitorType === 'VIP Customer') insight = `VIP Customer. Revenue ${formatCurrency(vp.revenue)}. Orders ${vp.orders}. Recommendation: Loyalty Campaign Candidate.`;
+    else if (visitorType === 'High Intent Visitor') insight = `High Intent Visitor. Viewed ${vp.productViews} products. Added to cart ${vp.addToCarts} times. No Purchase. Recommendation: Recovery Campaign Candidate.`;
+    else if (visitorType === 'At Risk Customer') insight = `At Risk Customer. Last purchase ${daysSinceLast} days ago. Recommendation: Re-engagement Campaign.`;
+    else insight = `Standard visitor behavior observed.`;
+
+    if (vp.revenue > topRevenue) {
+      topRevenue = vp.revenue;
+      highestValueVisitor = vp.visitorId;
+    }
+
+    const topProd = Array.from(vp.productCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'None';
+    const topCat = Array.from(vp.categoryCounts.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'None';
+    const journeyStr = (vp.journeyPath || []).slice(-15).join(' → ');
+
+    viRows.push({
+      vp,
+      row: [
+        vp.visitorId, visitorType, healthScore,
+        new Date(vp.firstVisit).toISOString(), new Date(vp.lastVisit).toISOString(), daysActive,
+        vp.country, vp.state, vp.city, vp.region, vp.isp, vp.latitude, vp.longitude,
+        vp.device, vp.browser, vp.source, vp.utmSource, vp.utmMedium, vp.utmCampaign, vp.utmContent, vp.utmTerm,
+        vp.sessions.size, vp.pageViews, vp.productViews, vp.categoriesViewed ? vp.categoriesViewed.size : 0,
+        vp.productsViewed ? Array.from(vp.productsViewed).join(', ') : '', 
+        vp.categoriesViewed ? Array.from(vp.categoriesViewed).join(', ') : '', 
+        topProd, topCat,
+        vp.addToCarts, vp.cartCount, formatCurrency(vp.cartValue), vp.cartCount > 0 ? 'Yes' : 'No',
+        vp.orders, formatCurrency(vp.revenue), formatCurrency(vp.orders > 0 ? vp.revenue/vp.orders : 0),
+        vp.firstPurchaseDate ? new Date(vp.firstPurchaseDate).toISOString() : '',
+        vp.lastPurchaseDate ? new Date(vp.lastPurchaseDate).toISOString() : '',
+        journeyStr, insight
+      ],
+      healthScoreVal, revenue: vp.revenue, purchases: vp.orders
+    });
+  });
+
+  viRows.sort((a, b) => b.revenue - a.revenue || b.healthScoreVal - a.healthScoreVal || b.purchases - a.purchases);
+
   const visitorVals = appendMeta([
-    ['VISITOR INTELLIGENCE'], createEmpty(),
-    ['METRIC', 'Value'],
-    ['New Visitors (All Time)', aggregation.dailyRows.reduce((sum, r) => sum + r.newVisitors, 0)],
-    ['Repeat Visitors', aggregation.dailyRows.reduce((sum, r) => sum + r.repeatVisitors, 0)],
-    ['Average Session Duration', formatMins(aggregation.executiveSummary.month.avgSessionDurationMins)],
-    createEmpty(), ['TOP EXIT PAGES', 'Exits'],
-    ...aggregation.topExitPages.map(r => [r.page, r.count])
+    ['VISITOR INTELLIGENCE ENGINE'], createEmpty(),
+    ['KPI CARDS', 'Value'],
+    ['Total Visitors', profilesArr.length],
+    ['Returning Visitors', returningCount],
+    ['High Intent Visitors', highIntentCount],
+    ['VIP Customers', vipCount],
+    ['At Risk Customers', atRiskCount],
+    ['Highest Value Visitor', highestValueVisitor],
+    createEmpty(),
+    ['TOP VISITORS LEADERBOARD (Top 100)'],
+    ['Visitor ID', 'City', 'State', 'Country', 'Sessions', 'Product Views', 'Carts', 'Purchases', 'Revenue', 'Visitor Type', 'Health Score', 'AI Insight'],
+    ...viRows.slice(0, 100).map(r => [
+      r.vp.visitorId, r.vp.city, r.vp.state, r.vp.country, r.vp.sessions.size, r.vp.productViews, r.vp.addToCarts,
+      r.vp.orders, formatCurrency(r.vp.revenue), r.row[1], r.row[2], r.row[39]
+    ]),
+    createEmpty(),
+    ['FULL VISITOR PROFILES DATABASE'],
+    [
+      'Visitor ID', 'Visitor Type', 'Health Score', 
+      'First Seen', 'Last Seen', 'Days Active',
+      'Country', 'State', 'City', 'Region', 'ISP', 'Latitude', 'Longitude',
+      'Device Type', 'Browser', 'Traffic Source', 'UTM Source', 'UTM Medium', 'UTM Campaign', 'UTM Content', 'UTM Term',
+      'Total Sessions', 'Total Page Views', 'Total Product Views', 'Total Categories Viewed',
+      'Products Viewed (List)', 'Categories Viewed (List)', 'Most Viewed Product', 'Most Viewed Category',
+      'Products Added To Cart', 'Cart Count', 'Current Cart Value', 'Abandoned Cart',
+      'Orders Placed', 'Total Revenue', 'Average Order Value',
+      'First Purchase Date', 'Last Purchase Date',
+      'Journey Preview (Last 15)', 'AI Insight'
+    ],
+    ...viRows.map(r => r.row)
   ]);
 
   // 8,9,10 DAILY/WEEKLY/MONTHLY
@@ -1469,110 +1555,7 @@ async function buildDashboardSheets(s) {
   ]);
 
   // 13. USER BEHAVIOR ANALYTICS
-  const ubVals = [];
-  ubVals.push(['USER BEHAVIOR ANALYTICS'], createEmpty(), ['Generated At', new Date().toISOString()]);
-  ubVals.push(createEmpty());
-
-  let totalVisitors = aggregation.visitorProfiles.length;
-  let returningVisitors = 0;
-  let customers = 0;
-  let highIntent = 0;
-  let totalSess = 0;
-  let totalRev = 0;
-
-  const profileRows = [];
-  const msInDay = 1000 * 60 * 60 * 24;
-
-  const visitorDurations = new Map();
-  aggregation.sessionRows.forEach(sess => {
-     if (sess.visitorId) {
-        const dur = (sess.maxTime - sess.minTime) / 60000;
-        visitorDurations.set(sess.visitorId, (visitorDurations.get(sess.visitorId) || 0) + dur);
-     }
-  });
-
-  const getTopFromMap = (map) => {
-    let top = 'None';
-    let max = 0;
-    for (const [key, val] of map.entries()) {
-      if (val > max) { max = val; top = key; }
-    }
-    return top;
-  };
-
-  aggregation.visitorProfiles.forEach(vp => {
-    const daysActive = Math.max(1, Math.ceil((vp.lastVisit - vp.firstVisit) / msInDay));
-    const daysSinceLast = Math.floor((Date.now() - vp.lastVisit) / msInDay);
-    const totalSessions = vp.sessions.size;
-    const ltv = vp.revenue;
-    const aov = vp.orders > 0 ? vp.revenue / vp.orders : 0;
-    const timeSpent = visitorDurations.get(vp.visitorId) || 0;
-    
-    const engagementScore = (vp.pageViews * 1) + (vp.productViews * 2) + (vp.addToCarts * 5) + (vp.orders * 10);
-    
-    let status = 'New Visitor';
-    if (vp.orders > 0) status = 'Customer';
-    else if (totalSessions > 1) status = 'Returning Visitor';
-    else if (vp.productViews > 5 && vp.orders === 0) status = 'Window Shopper';
-    else if (vp.addToCarts > 0) status = 'High Intent';
-
-    if (status === 'Customer') customers++;
-    else if (status === 'Returning Visitor') returningVisitors++;
-    if (status === 'High Intent' || vp.addToCarts > 0) highIntent++;
-    totalSess += totalSessions;
-    totalRev += vp.revenue;
-
-    profileRows.push([
-      vp.visitorId,
-      new Date(vp.firstVisit).toISOString(),
-      new Date(vp.lastVisit).toISOString(),
-      vp.country,
-      vp.state,
-      vp.city,
-      vp.latitude,
-      vp.longitude,
-      vp.source,
-      vp.device,
-      vp.browser,
-      totalSessions,
-      vp.pageViews,
-      vp.productViews,
-      vp.addToCarts,
-      Math.round(timeSpent * 10) / 10,
-      getTopFromMap(vp.productCounts),
-      getTopFromMap(vp.categoryCounts),
-      vp.orders,
-      vp.revenue,
-      Math.round(aov * 100) / 100,
-      vp.lastVisitedPage,
-      status,
-      daysActive,
-      daysSinceLast,
-      ltv,
-      engagementScore
-    ]);
-  });
-
-  const avgSessCount = totalVisitors > 0 ? (totalSess / totalVisitors).toFixed(2) : 0;
-  const avgRevPerVis = totalVisitors > 0 ? (totalRev / totalVisitors).toFixed(2) : 0;
-
-  ubVals.push(['EXECUTIVE SUMMARY', '', '', '', '', '']);
-  ubVals.push(['Total Visitors', 'Returning Visitors', 'Customers', 'High Intent Visitors', 'Avg Session Count', 'Avg Revenue Per Visitor']);
-  ubVals.push([totalVisitors, returningVisitors, customers, highIntent, avgSessCount, avgRevPerVis]);
-  ubVals.push(createEmpty());
-  
-  for(let i=0; i<20; i++) ubVals.push(createEmpty()); // space for charts
-  
-  ubVals.push([
-    'Visitor ID', 'First Visit Date', 'Last Visit Date', 'Country', 'State', 'City', 'Approx Latitude', 'Approx Longitude', 'Traffic Source',
-    'Device', 'Browser', 'Total Sessions', 'Total Page Views', 'Total Product Views', 'Total Add To Cart',
-    'Total Time Spent (Mins)', 'Most Viewed Product', 'Most Viewed Category', 'Orders Placed', 'Total Revenue',
-    'Average Order Value', 'Last Visited Page', 'Visitor Status', 'Days Active', 'Days Since Last Visit',
-    'Customer Lifetime Value', 'Engagement Score'
-  ]);
-  
-  profileRows.sort((a,b) => b[24] - a[24]);
-  ubVals.push(...profileRows);
+  const ubVals = [['DEPRECATED', 'Please see the Visitor Intelligence Sheet']];
 
   // CAMPAIGN ANALYTICS
   let topCampaignRev = 'None';
