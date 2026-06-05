@@ -48,18 +48,23 @@ exports.trackEvent = async (req, res) => {
     const payload = sanitizeTrackingPayload(req.body || {});
     
     // Enrich payload with server-side network data
-    payload.ip_address = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    payload.ip_address = rawIp.split(',')[0].trim();
     
     // Perform Async GeoLookup without blocking response
     const geoData = await lookupIP(payload.ip_address);
     if (geoData) {
-      payload.country = geoData.country;
-      payload.state = geoData.state;
-      payload.city = geoData.city;
-      payload.region = geoData.region;
-      payload.isp = geoData.isp;
+      payload.geo_country = geoData.geo_country;
+      payload.geo_state = geoData.geo_state;
+      payload.geo_city = geoData.geo_city;
+      payload.geo_region = geoData.geo_region;
+      payload.geo_isp = geoData.geo_isp;
+      payload.geo_latitude = geoData.geo_latitude;
+      payload.geo_longitude = geoData.geo_longitude;
     } else {
-      payload.country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+      payload.geo_country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+      payload.geo_state = req.headers['x-vercel-ip-country-region'] || 'Unknown';
+      payload.geo_city = req.headers['x-vercel-ip-city'] || 'Unknown';
     }
 
     for (const f of REQUIRED_FIELDS) {
@@ -113,7 +118,8 @@ exports.trackBatch = async (req, res) => {
       const payload = sanitizeTrackingPayload(raw || {});
       
       // Enrich payload with server-side network data
-      payload.ip_address = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+      const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+      payload.ip_address = rawIp.split(',')[0].trim();
       
       const geoData = await lookupIP(payload.ip_address);
       if (geoData) {
@@ -126,6 +132,8 @@ exports.trackBatch = async (req, res) => {
         payload.geo_longitude = geoData.geo_longitude;
       } else {
         payload.geo_country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+        payload.geo_state = req.headers['x-vercel-ip-country-region'] || 'Unknown';
+        payload.geo_city = req.headers['x-vercel-ip-city'] || 'Unknown';
       }
       
       const h = hashEvent(payload);
