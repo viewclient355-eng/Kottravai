@@ -78,7 +78,7 @@ const BlogDetail = () => {
         let matchCounter = 0;
 
         const processHTML = (html: string) => {
-            return html.replace(/<h([23])>(.*?)<\/h\1>/g, (match, level, text) => {
+            return html.replace(/<h([23])>(.*?)<\/h\1>/g, (_, level, text) => {
                 const cleanText = text.replace(/<[^>]+>/g, '');
                 const id = `sec-${matchCounter++}-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20)}`;
                 extractedHeadings.push({ id, text: cleanText, level: parseInt(level) });

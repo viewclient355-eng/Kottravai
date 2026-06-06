@@ -21,8 +21,8 @@ const BlogRelatedProducts: React.FC<Props> = ({ productIds, title = "Shop Relate
         
         // If we don't have enough matches (maybe IDs changed or were placeholders), just grab some bestsellers
         if (matches.length < 3) {
-            const bestSellers = products.filter(p => p.badge === 'Bestseller' && !matches.find(m => m.id === p.id)).slice(0, 3 - matches.length);
-            matches = [...matches, ...bestSellers];
+            const randomExtras = products.filter(p => !matches.find(m => m.id === p.id)).slice(0, 3 - matches.length);
+            matches = [...matches, ...randomExtras];
         }
 
         // Still not enough? Grab random products
