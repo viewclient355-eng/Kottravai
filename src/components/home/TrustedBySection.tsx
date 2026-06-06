@@ -8,7 +8,7 @@ const clients = [
     { name: "Sprint 6", logo: "/sprint.jpeg" },
     { name: "Franchise Bhoomi", logo: "/franchise.jpeg" },
     { name: "Startup Singam", logo: "/startupsingam.jpeg" },
-    { name: "TenSemi", logo: "/tensemi-logo-Ge4Y2E9_.webp" }
+    { name: "TenSemi", logo: "/tensemi.webp" }
 ];
 
 const TrustedBySection = () => {
