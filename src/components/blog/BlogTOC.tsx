@@ -93,7 +93,7 @@ const BlogTOC: React.FC<Props> = ({ headings }) => {
             </div>
 
             {/* Desktop Sticky TOC */}
-            <div className="hidden lg:block sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto pr-4 scrollbar-hide">
+            <div className="hidden lg:block pr-4">
                 <div className="flex items-center gap-2 mb-6 text-[#2D1B4E]">
                     <List size={20} className="text-[#b5128f]" />
                     <h3 className="font-black uppercase tracking-widest text-xs">In This Article</h3>

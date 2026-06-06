@@ -178,11 +178,11 @@ const BlogDetail = () => {
                     <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-4 md:p-8 lg:p-10 flex flex-col lg:flex-row gap-8 lg:gap-12">
                         
                         {/* Left Sidebar: TOC */}
-                        <aside className="w-full lg:w-1/4 flex-shrink-0">
+                        <aside className="w-full lg:w-1/4 flex-shrink-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] overflow-y-auto scrollbar-hide pb-8">
                             <BlogTOC headings={headings} />
                             
                             {/* Share & Sticky CTA for Desktop */}
-                            <div className="hidden lg:block sticky top-[500px] mt-12 border-t border-gray-100 pt-8">
+                            <div className="hidden lg:block mt-12 border-t border-gray-100 pt-8 pr-4">
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Share Article</p>
                                 <button onClick={handleShare} className="flex items-center gap-2 text-gray-600 hover:text-[#b5128f] transition-colors mb-8">
                                     <Share2 size={20} /> Share
