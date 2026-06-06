@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HeartHandshake, PackageOpen, Sparkles, Briefcase, Heart, CalendarCheck, Globe, Store, ChevronRight } from 'lucide-react';
 import analytics from '@/utils/analyticsService';
 
