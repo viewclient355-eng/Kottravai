@@ -103,7 +103,7 @@ const CartEmailModal: React.FC<CartEmailModalProps> = ({ isOpen, onClose }) => {
                         <div className="bg-[#FFF5F3] border border-[#FFE4DE] rounded-xl p-4 flex items-start gap-3 mb-6 shadow-sm">
                             <Gift className="text-[#F43F5E] shrink-0 mt-0.5" size={18} />
                             <p className="text-xs font-bold text-[#9F1239] leading-snug">
-                                🎁 Save your cart and get 5% off your first order.
+                                Submit your email to get more coupon codes to your mail
                             </p>
                         </div>
 
