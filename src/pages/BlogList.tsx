@@ -61,7 +61,7 @@ const BlogList = () => {
                 {/* Header Section */}
                 <div className="bg-[#FFF5F3] py-16 md:py-24 border-b border-[#FFE4DE]">
                     <div className="container mx-auto px-4 text-center">
-                        <h1 className="text-4xl md:text-6xl font-black font-comfortaa text-[#2D1B4E] mb-6">
+                        <h1 className="text-4xl md:text-6xl font-black text-[#2D1B4E] mb-6">
                             Kottravai Journal
                         </h1>
                         <p className="text-gray-600 max-w-2xl mx-auto text-lg mb-10">
@@ -113,7 +113,7 @@ const BlogList = () => {
                                 <div className="mb-20">
                                     <div className="flex items-center gap-2 mb-6">
                                         <div className="w-2 h-6 bg-[#b5128f] rounded-sm"></div>
-                                        <h2 className="text-2xl font-black font-comfortaa text-[#2D1B4E] uppercase tracking-widest">Featured Story</h2>
+                                        <h2 className="text-2xl font-black text-[#2D1B4E] uppercase tracking-widest">Featured Story</h2>
                                     </div>
                                     <Link to={`/blog/${featuredPost.slug}`} className="group block">
                                         <div className="grid md:grid-cols-2 gap-8 items-center bg-gray-50 rounded-3xl p-4 md:p-8 border border-gray-100 hover:shadow-xl transition-all">
@@ -129,7 +129,7 @@ const BlogList = () => {
                                                 <span className="inline-block px-3 py-1 bg-[#FFE4DE] text-[#9F1239] text-xs font-bold rounded-full mb-4 w-max uppercase tracking-wider">
                                                     {featuredPost.category}
                                                 </span>
-                                                <h3 className="text-3xl md:text-4xl font-black font-comfortaa text-gray-900 mb-4 group-hover:text-[#b5128f] transition-colors leading-tight">
+                                                <h3 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 group-hover:text-[#b5128f] transition-colors leading-tight">
                                                     {featuredPost.title}
                                                 </h3>
                                                 <p className="text-gray-600 mb-6 text-lg line-clamp-3">
@@ -149,7 +149,7 @@ const BlogList = () => {
                             {/* Feed Grid */}
                             <div className="flex items-center gap-2 mb-8">
                                 <div className="w-2 h-6 bg-gray-300 rounded-sm"></div>
-                                <h2 className="text-2xl font-black font-comfortaa text-[#2D1B4E] uppercase tracking-widest">
+                                <h2 className="text-2xl font-black text-[#2D1B4E] uppercase tracking-widest">
                                     {searchQuery ? 'Search Results' : 'Latest Articles'}
                                 </h2>
                             </div>

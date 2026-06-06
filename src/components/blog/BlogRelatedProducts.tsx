@@ -47,7 +47,7 @@ const BlogRelatedProducts: React.FC<Props> = ({ productIds, title = "Shop Relate
     return (
         <div className="my-12">
             <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
-                <h3 className="text-2xl font-black font-comfortaa text-[#2D1B4E]">{title}</h3>
+                <h3 className="text-2xl font-black text-[#2D1B4E]">{title}</h3>
                 <Link to="/shop" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors hidden md:block">
                     View All Products &rarr;
                 </Link>

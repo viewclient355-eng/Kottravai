@@ -46,7 +46,7 @@ const BlogEmailCapture: React.FC<Props> = ({ post }) => {
                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FFE4DE]">
                     <Mail className="text-[#9F1239]" size={28} />
                 </div>
-                <h3 className="text-2xl font-black font-comfortaa text-[#2D1B4E] mb-2">You're on the list!</h3>
+                <h3 className="text-2xl font-black text-[#2D1B4E] mb-2">You're on the list!</h3>
                 <p className="text-gray-600">Thank you for subscribing. We'll be in touch soon with sustainable living tips and exclusive offers.</p>
             </div>
         );
@@ -55,7 +55,7 @@ const BlogEmailCapture: React.FC<Props> = ({ post }) => {
     return (
         <div className="bg-[#FFF5F3] border border-[#FFE4DE] rounded-2xl p-8 my-12 shadow-sm">
             <div className="max-w-2xl mx-auto text-center">
-                <h3 className="text-2xl font-black font-comfortaa text-[#2D1B4E] mb-3">Stay Updated with Sustainable Living Tips</h3>
+                <h3 className="text-2xl font-black text-[#2D1B4E] mb-3">Stay Updated with Sustainable Living Tips</h3>
                 <p className="text-gray-600 mb-8">Get product updates, artisan stories, and exclusive offers delivered directly to your inbox.</p>
                 
                 <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 max-w-xl mx-auto">

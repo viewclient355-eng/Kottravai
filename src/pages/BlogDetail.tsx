@@ -83,7 +83,7 @@ const BlogDetail = () => {
                 const id = `sec-${matchCounter++}-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20)}`;
                 extractedHeadings.push({ id, text: cleanText, level: parseInt(level) });
                 // Note: .scroll-mt-32 helps offset sticky headers when anchor jumping
-                return `<h${level} id="${id}" class="scroll-mt-32 font-black font-comfortaa text-[#2D1B4E] mb-6 mt-12">${text}</h${level}>`;
+                return `<h${level} id="${id}" class="scroll-mt-32 font-black text-[#2D1B4E] mb-6 mt-12">${text}</h${level}>`;
             });
         };
 
@@ -161,7 +161,7 @@ const BlogDetail = () => {
                             </span>
                         </div>
                         
-                        <h1 className="text-4xl md:text-5xl lg:text-6xl font-black font-comfortaa text-white leading-tight mb-8 drop-shadow-lg">
+                        <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight mb-8 drop-shadow-lg">
                             {post.title}
                         </h1>
                         
@@ -237,7 +237,7 @@ const BlogDetail = () => {
                                     
                                     <div className="relative z-10">
                                         <HeartHandshake className="mx-auto text-[#FFE4DE] mb-6" size={48} />
-                                        <h3 className="text-3xl font-black font-comfortaa mb-6">Every purchase makes an impact.</h3>
+                                        <h3 className="text-3xl font-black mb-6">Every purchase makes an impact.</h3>
                                         <p className="text-lg text-white/80 max-w-xl mx-auto mb-10">
                                             By choosing Kottravai, you are directly supporting rural women entrepreneurs and preserving India's artisan communities.
                                         </p>
@@ -267,7 +267,7 @@ const BlogDetail = () => {
                     <div className="container mx-auto px-4 max-w-7xl mt-24">
                         <div className="flex items-center gap-2 mb-10">
                             <div className="w-2 h-6 bg-gray-300 rounded-sm"></div>
-                            <h2 className="text-3xl font-black font-comfortaa text-[#2D1B4E] uppercase tracking-widest">
+                            <h2 className="text-3xl font-black text-[#2D1B4E] uppercase tracking-widest">
                                 Read Next
                             </h2>
                         </div>
