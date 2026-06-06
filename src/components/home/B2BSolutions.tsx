@@ -181,9 +181,6 @@ const B2BSolutions = () => {
                             <div className="h-40 w-full relative overflow-hidden">
                                 <img src={scenario.image} alt={scenario.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors"></div>
-                                <div className={`absolute -bottom-6 left-6 w-12 h-12 rounded-xl ${scenario.bgColor} ${scenario.iconColor} flex items-center justify-center shadow-lg`}>
-                                    <scenario.icon size={24} />
-                                </div>
                             </div>
                             
                             {/* Card Content */}
