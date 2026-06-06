@@ -29,9 +29,9 @@ const Footer = () => {
                 <div className="lg:col-span-2">
                     <h4 className="text-[#878787] text-[12px] font-medium mb-4 uppercase tracking-wider">About</h4>
                     <ul className="space-y-2 text-[12px] font-bold">
+                        <li><Link to="/about-us" className="hover:underline">About Kottravai</Link></li>
+                        <li><Link to="/blog" className="hover:underline">Blog</Link></li>
                         <li><Link to="/contact" className="hover:underline">Contact Us</Link></li>
-                        <li><Link to="/about" className="hover:underline">About Us</Link></li>
-                        <li><Link to="/blog" className="hover:underline">Kottravai Stories</Link></li>
                     </ul>
                 </div>
 

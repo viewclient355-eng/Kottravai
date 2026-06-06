@@ -1,32 +1,52 @@
 [
     {
-        "id": 101,
-        "slug": "welcome-to-kottravai",
-        "title": "Welcome to Kottravai",
-        "excerpt": "We are excited to launch our new platform. Read more about our journey.",
-        "content": "<p>This is the first post on our new blog. Stay tuned for more updates!</p>",
-        "date": "2025-01-20",
-        "author": "Admin",
-        "featured_image": "/uploads/2025/01/blog-1.jpg"
+        "id": 1,
+        "slug": "kottravai-creates-opportunities",
+        "title": "Kottravai Creates Opportunities for Women Entrepreneurs",
+        "excerpt": "Empowering rural artisans through sustainable livelihood initiatives. We bridge the gap between traditional craftsmanship and modern markets, ensuring every creator gets their due.",
+        "content": "<p>Empowering rural artisans through sustainable livelihood initiatives. We bridge the gap between traditional craftsmanship and modern markets, ensuring every creator gets their due.</p><p>Our vision is to build a platform where women entrepreneurs can thrive independently.</p>",
+        "date": "2025-06-01",
+        "author": "Kottravai Team",
+        "featured_image": "/uploads/2026/01/journal-featured.jpg"
     },
     {
-        "id": 102,
-        "slug": "tech-trends-2026",
-        "title": "Top Tech Trends in 2026",
-        "excerpt": "Discover what's shaping the future of technology this year.",
-        "content": "<p>From AI agents to sustainable tech, here is what you need to know...</p>",
-        "date": "2026-01-15",
-        "author": "Editor",
-        "featured_image": "/uploads/2026/01/trends.jpg"
+        "id": 2,
+        "slug": "skill-development",
+        "title": "Kottravai Women's Skill Development Training Initiative Launched by Mr. Sridhar Vembu",
+        "excerpt": "A deep dive into our new skill development training initiative aimed at transforming lives.",
+        "content": "<p>We are thrilled to announce the launch of our Women's Skill Development Training Initiative, officially inaugurated by Mr. Sridhar Vembu.</p><p>This initiative will provide hands-on training to hundreds of women, equipping them with the craftsmanship skills needed to create premium sustainable products.</p>",
+        "date": "2025-06-01",
+        "author": "Kottravai Team",
+        "featured_image": "/uploads/2026/01/journal-launch.jpg"
     },
     {
-        "id": 103,
-        "slug": "growing-your-business",
-        "title": "Tips for Growing Your Business",
-        "excerpt": "Practical advice for scaling your operations effectively.",
-        "content": "<p>Growth requires strategy. Here are 5 key tips...</p>",
-        "date": "2026-01-25",
-        "author": "Admin",
-        "featured_image": ""
+        "id": 3,
+        "slug": "achievements",
+        "title": "Kottravai Achievements in Kungumam Thozi Reports by Mrs. Ramya Ranganathan",
+        "excerpt": "Celebrating our recent features and recognitions in empowering women artisans.",
+        "content": "<p>Our efforts in transforming the lives of rural women artisans have been prominently featured in the Kungumam Thozi Reports, thanks to the wonderful coverage by Mrs. Ramya Ranganathan.</p><p>This recognition fuels our mission to reach even more artisans across the country.</p>",
+        "date": "2025-12-01",
+        "author": "Kottravai Team",
+        "featured_image": "/Ach.webp"
+    },
+    {
+        "id": 4,
+        "slug": "employment-opportunities",
+        "title": "Strengthening Women's Employment Opportunities to Recognize Their Handcrafted Works",
+        "excerpt": "How we are creating sustainable employment opportunities for women across the region.",
+        "content": "<p>True empowerment begins with financial independence. At Kottravai, we are dedicated to strengthening employment opportunities for women by giving their handcrafted works a global stage.</p><p>By removing the middlemen, our artisans earn what they truly deserve.</p>",
+        "date": "2025-06-03",
+        "author": "Kottravai Team",
+        "featured_image": "/uploads/2026/01/journal-stall.jpg"
+    },
+    {
+        "id": 5,
+        "slug": "transforming-lives",
+        "title": "Transforming Beedi-Working Women into Skilled Craft Professionals",
+        "excerpt": "The journey of transformation from hazardous labor to skilled craftsmanship.",
+        "content": "<p>One of our most impactful missions has been helping women transition out of hazardous beedi-rolling work into safe, respected, and highly skilled craft professions.</p><p>Their incredible talent is now being showcased through beautiful eco-friendly products.</p>",
+        "date": "2025-12-20",
+        "author": "Kottravai Team",
+        "featured_image": "/4.webp"
     }
 ]
