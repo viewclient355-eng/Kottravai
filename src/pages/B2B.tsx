@@ -10,6 +10,7 @@ import WhyGiftWithUs from '@/components/home/WhyGiftWithUs';
 import TrustedBySection from '@/components/home/TrustedBySection';
 import TestimonialsB2B from '@/components/home/TestimonialsB2B';
 import FriendsModal from '@/components/FriendsModal';
+import B2BSolutions from '@/components/home/B2BSolutions';
 
 const B2B = () => {
     const { getReviewsByPage } = useReviews();
@@ -90,6 +91,9 @@ const B2B = () => {
             
             {/* 1. Icons */}
             <PartnerSection />
+            
+            {/* NEW: Scenario-based Solutions */}
+            <B2BSolutions />
             
             {/* 2. Why Gift With Kottravai */}
             <WhyGiftWithUs />
