@@ -104,7 +104,7 @@ const ExploreCategories = () => {
                         >
                             <Link 
                                 to={cat.link} 
-                                className="group flex flex-col bg-[#FAF4F7] rounded-xl p-4 border border-[#8E2A8B]/5 transition-all duration-300 hover:shadow-[0_8px_30px_rgba(142,42,139,0.08)] hover:-translate-y-1"
+                                className="group flex flex-col h-full bg-[#FAF4F7] rounded-xl p-4 border border-[#8E2A8B]/5 transition-all duration-300 hover:shadow-[0_8px_30px_rgba(142,42,139,0.08)] hover:-translate-y-1"
                             >
                                 {/* Image Area */}
                                 <div className="aspect-[4/5] w-full rounded-xl overflow-hidden bg-white shadow-sm mb-4">
