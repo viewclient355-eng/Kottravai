@@ -3,6 +3,7 @@ import { Product } from '@/data/products';
 import { useAuth } from './AuthContext';
 import { useProducts } from './ProductContext';
 import analytics from '@/utils/analyticsService';
+import CartEmailModal from '@/components/CartEmailModal';
 
 export interface CartItem extends Product {
     quantity: number;
@@ -40,6 +41,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     const [couponDiscount, setCouponDiscount] = useState(0);
     const [couponApplied, setCouponApplied] = useState(false);
     const [couponError, setCouponError] = useState('');
+
+    // Cart Email Modal state
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
     // Storage key based on user session
     const storageKey = isAuthenticated && user?.username
@@ -181,6 +185,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
             variant: variant?.weight,
             price: variant?.price || product.price
         });
+
+        // Trigger email capture modal if guest and email not saved
+        if (!isAuthenticated && !localStorage.getItem('cart_email') && !sessionStorage.getItem('cart_email_skipped')) {
+            setIsEmailModalOpen(true);
+        }
     };
 
     const removeFromCart = (productId: string, variantWeight?: string) => {
@@ -278,6 +287,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
             removeCoupon
         }}>
             {children}
+            <CartEmailModal 
+                isOpen={isEmailModalOpen} 
+                onClose={() => setIsEmailModalOpen(false)} 
+            />
         </CartContext.Provider>
     );
 };
