@@ -4,7 +4,7 @@ const clients = [
     { name: "Aram", logo: "/WhatsApp Image 2026-05-15 at 4.58.43 PM.jpeg" },
     { name: "Raphael Creatives", logo: "/raphael.jpeg" },
     { name: "Iyanthiram", logo: "/iyanthiran.jpeg" },
-    { name: "Iragu Events", logo: "/iragu.jpeg" },
+    { name: "Iragu Events", logo: "/logo (1).png" },
     { name: "Sprint 6", logo: "/sprint.jpeg" },
     { name: "Franchise Bhoomi", logo: "/franchise.jpeg" },
     { name: "Startup Singam", logo: "/startupsingam.jpeg" },
