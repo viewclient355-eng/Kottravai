@@ -140,7 +140,7 @@ const BlogDetail = () => {
             <article className="bg-white min-h-screen pb-20 relative">
                 
                 {/* Hero Section */}
-                <header className="relative bg-gray-900 pt-24 pb-32 md:pt-32 md:pb-48 overflow-hidden">
+                <header className="relative bg-gray-900 pt-16 pb-24 md:pt-24 md:pb-32 overflow-hidden">
                     <div className="absolute inset-0">
                         <img 
                             src={post.featuredImage} 
@@ -175,7 +175,7 @@ const BlogDetail = () => {
 
                 {/* Content Container */}
                 <div className="container mx-auto px-4 max-w-7xl -mt-16 md:-mt-24 relative z-20">
-                    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 md:p-12 lg:p-16 flex flex-col lg:flex-row gap-12">
+                    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-4 md:p-8 lg:p-10 flex flex-col lg:flex-row gap-8 lg:gap-12">
                         
                         {/* Left Sidebar: TOC */}
                         <aside className="w-full lg:w-1/4 flex-shrink-0">

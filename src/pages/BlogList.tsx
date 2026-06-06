@@ -59,7 +59,7 @@ const BlogList = () => {
 
             <div className="bg-white min-h-screen">
                 {/* Header Section */}
-                <div className="bg-[#FFF5F3] py-16 md:py-24 border-b border-[#FFE4DE]">
+                <div className="bg-[#FFF5F3] py-10 md:py-16 border-b border-[#FFE4DE]">
                     <div className="container mx-auto px-4 text-center">
                         <h1 className="text-4xl md:text-6xl font-black text-[#2D1B4E] mb-6">
                             Kottravai Journal
@@ -101,7 +101,7 @@ const BlogList = () => {
                     </div>
                 </div>
 
-                <div className="container mx-auto px-4 py-16 max-w-7xl">
+                <div className="container mx-auto px-4 py-8 md:py-12 max-w-7xl">
                     {isLoading ? (
                         <div className="flex justify-center items-center h-64">
                             <div className="w-12 h-12 border-4 border-gray-100 border-t-[#b5128f] rounded-full animate-spin"></div>
