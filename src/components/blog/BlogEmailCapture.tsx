@@ -58,27 +58,29 @@ const BlogEmailCapture: React.FC<Props> = ({ post }) => {
                 <h3 className="text-2xl font-black text-[#2D1B4E] mb-3">Stay Updated with Sustainable Living Tips</h3>
                 <p className="text-gray-600 mb-8">Get product updates, artisan stories, and exclusive offers delivered directly to your inbox.</p>
                 
-                <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 max-w-xl mx-auto">
-                    <input 
-                        type="text"
-                        placeholder="First Name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        className="flex-1 h-12 px-4 rounded-xl border border-gray-200 focus:outline-none focus:border-[#b5128f] transition-colors"
-                    />
-                    <input 
-                        type="email"
-                        placeholder="Email Address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="flex-1 h-12 px-4 rounded-xl border border-gray-200 focus:outline-none focus:border-[#b5128f] transition-colors"
-                    />
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-lg mx-auto">
+                    <div className="flex flex-col md:flex-row gap-4">
+                        <input 
+                            type="text"
+                            placeholder="First Name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                            className="flex-1 h-12 px-4 rounded-xl border border-gray-200 focus:outline-none focus:border-[#b5128f] transition-colors"
+                        />
+                        <input 
+                            type="email"
+                            placeholder="Email Address"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className="flex-1 h-12 px-4 rounded-xl border border-gray-200 focus:outline-none focus:border-[#b5128f] transition-colors"
+                        />
+                    </div>
                     <button 
                         type="submit"
                         disabled={status === 'loading'}
-                        className="h-12 px-8 bg-black text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-[#b5128f] transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                        className="w-full h-12 bg-black text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-[#b5128f] transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
                     >
                         {status === 'loading' ? 'Submitting...' : <>Subscribe <ArrowRight size={16} /></>}
                     </button>
