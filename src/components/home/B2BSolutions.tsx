@@ -32,7 +32,7 @@ const B2BSolutions = () => {
             solution: "Curated gift hampers featuring handmade, sustainable products.",
             cta: "Explore Combos",
             icon: HeartHandshake,
-            image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_emp_appreciation.png",
             bgColor: "bg-pink-50",
             iconColor: "text-pink-600",
             eventName: "corporate_gifting_inquiry"
@@ -43,7 +43,7 @@ const B2BSolutions = () => {
             solution: "Custom welcome kits with artisan-made items & branding.",
             cta: "Build Kits",
             icon: PackageOpen,
-            image: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_welcome_kit.png",
             bgColor: "bg-blue-50",
             iconColor: "text-blue-600",
             eventName: "corporate_gifting_inquiry"
@@ -54,7 +54,7 @@ const B2BSolutions = () => {
             solution: "Diwali, Pongal, and New Year hampers in bulk.",
             cta: "View Festive",
             icon: Sparkles,
-            image: "https://images.unsplash.com/photo-1604147706283-d7119b5b822c?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_festive_gifting.png",
             bgColor: "bg-amber-50",
             iconColor: "text-amber-600",
             eventName: "corporate_gifting_inquiry"
@@ -65,7 +65,7 @@ const B2BSolutions = () => {
             solution: "Premium artisan boxes for client retention.",
             cta: "Request Catalogue",
             icon: Briefcase,
-            image: "https://images.unsplash.com/photo-1556761175-4b46a572b786?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_client_appreciation.png",
             bgColor: "bg-indigo-50",
             iconColor: "text-indigo-600",
             eventName: "corporate_gifting_inquiry"
@@ -76,7 +76,7 @@ const B2BSolutions = () => {
             solution: "Elegant handmade collections with custom packaging.",
             cta: "Explore Wedding",
             icon: Heart,
-            image: "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_wedding_return.png",
             bgColor: "bg-rose-50",
             iconColor: "text-rose-600",
             eventName: "wedding_gift_inquiry"
@@ -87,7 +87,7 @@ const B2BSolutions = () => {
             solution: "Useful, sustainable products for corporate events.",
             cta: "View Solutions",
             icon: CalendarCheck,
-            image: "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_event_giveaway.png",
             bgColor: "bg-emerald-50",
             iconColor: "text-emerald-600",
             eventName: "corporate_gifting_inquiry"
@@ -98,7 +98,7 @@ const B2BSolutions = () => {
             solution: "Every order supports rural women entrepreneurs.",
             cta: "Partner With Us",
             icon: Globe,
-            image: "https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_csr_impact.png",
             bgColor: "bg-teal-50",
             iconColor: "text-teal-600",
             eventName: "csr_partnership_inquiry"
@@ -109,7 +109,7 @@ const B2BSolutions = () => {
             solution: "Wholesale pricing, custom sourcing, and artisan collections.",
             cta: "Become Partner",
             icon: Store,
-            image: "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?q=80&w=500&auto=format&fit=crop",
+            image: "/b2b/b2b_retail_partner.png",
             bgColor: "bg-purple-50",
             iconColor: "text-purple-600",
             eventName: "retail_partner_inquiry"
@@ -174,7 +174,7 @@ const B2BSolutions = () => {
                     {scenarios.map((scenario, idx) => (
                         <div 
                             key={idx} 
-                            className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl border border-gray-100 transition-all duration-300 group flex flex-col flex-shrink-0 w-[280px] md:w-[320px] snap-start"
+                            className="bg-white overflow-hidden shadow-md hover:shadow-xl border border-gray-100 transition-all duration-300 group flex flex-col flex-shrink-0 w-[280px] md:w-[320px] snap-start"
                             onMouseEnter={() => handleCardClick(scenario.title)}
                         >
                             {/* Card Image Header */}
