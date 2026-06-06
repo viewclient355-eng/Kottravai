@@ -142,7 +142,7 @@ const B2BSolutions = () => {
     }, []);
 
     return (
-        <section className="py-20 md:py-32 bg-gray-50 overflow-hidden" id="solutions">
+        <section className="py-6 md:py-10 bg-gray-50 overflow-hidden" id="solutions">
             <div className="container mx-auto px-4 max-w-7xl">
                 
                 {/* Section Header with Carousel Controls */}

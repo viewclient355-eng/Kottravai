@@ -176,7 +176,7 @@ const B2B = () => {
 
 
             {/* 5. From Concept to Connection (How We Work) */}
-            <section className="py-10 md:py-12 bg-white relative overflow-hidden" id="how-we-work">
+            <section className="py-6 md:py-10 bg-white relative overflow-hidden" id="how-we-work">
                 <div className="container mx-auto px-4 max-w-7xl">
                     <div className="text-center mb-8">
                         <div className="flex items-center justify-center gap-4 mb-2">
@@ -289,7 +289,7 @@ const B2B = () => {
 
             {/* 8. For Companies That Value People (Professional Partnerships) */}
             {/* 9. Partner With Kottravai (CTA included here) */}
-            <section className="py-10 md:py-12 bg-white relative overflow-hidden">
+            <section className="py-6 md:py-10 bg-white relative overflow-hidden">
                 <div className="container mx-auto px-4 max-w-7xl">
                     <div className="flex flex-col lg:flex-row items-center gap-12">
                         {/* Left Column: Narrative */}
@@ -371,7 +371,7 @@ const B2B = () => {
             </section>
 
             {/* 10. Partner With Us (Contact Form) */}
-            <section className="py-10 md:py-12 bg-gray-50" id="contact-form">
+            <section className="py-6 md:py-10 bg-gray-50" id="contact-form">
                 <div className="container mx-auto px-4">
                     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden flex flex-col md:flex-row">
                         <div className="md:w-1/3 bg-[#2D1B4E] text-white p-10 flex flex-col justify-between">
