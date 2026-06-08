@@ -89,8 +89,10 @@ const TestimonialCard = ({ t }: { t: any }) => {
 
                 <div className="flex justify-center -mt-6">
                     <div className="relative">
-                        <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center border-2 border-dashed border-[#8E2A8B]/20 overflow-hidden">
-                            <img src={t.avatar} alt={t.name} className="w-full h-full object-cover" />
+                        <div className="w-16 h-16 rounded-full bg-[#8E2A8B]/10 border-2 border-dashed border-[#8E2A8B]/30 flex items-center justify-center">
+                            <span className="text-xl font-black text-[#8E2A8B]">
+                                {t.name.charAt(0)}
+                            </span>
                         </div>
                     </div>
                 </div>
