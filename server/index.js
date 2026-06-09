@@ -34,6 +34,7 @@ const monitoring = require('./monitoring');
 const fs = require('fs');
 const { sendEmail } = require('./utils/mailer');
 const { sendWhatsAppOTP } = require('./utils/whatsapp');
+const { createLeadWithActivity, analyzeLeadAIById } = require('./utils/leadHelpers');
 const {
     getB2BAdminTemplate,
     getB2BUserTemplate,
@@ -287,17 +288,38 @@ const authenticateAdmin = (req, res, next) => {
     const fallbackSecret = 'Admin!Kottravai2025%100e'; // Fallback for cached Vite environment
     const auditorSecret = req.headers['x-auditor-secret'];
 
-    if (adminSecret && (adminSecret === systemSecret || adminSecret === fallbackSecret || adminSecret === 'Admin!Kottravai2025%100')) {
+    console.log('🔐 [authenticateAdmin] Validating request');
+    console.log('🔐 [authenticateAdmin] Method:', req.method, 'Path:', req.path);
+    console.log('🔐 [authenticateAdmin] Admin secret provided:', !!adminSecret);
+    console.log('🔐 [authenticateAdmin] Admin secret value:', adminSecret ? `"${adminSecret.substring(0, 30)}..."` : 'NONE');
+    console.log('🔐 [authenticateAdmin] System secret (from ENV):', systemSecret ? `"${systemSecret.substring(0, 30)}..."` : 'NONE');
+    console.log('🔐 [authenticateAdmin] Fallback secret:', fallbackSecret ? `"${fallbackSecret.substring(0, 30)}..."` : 'NONE');
+    
+    // Compare tokens
+    const token1Match = adminSecret === systemSecret;
+    const token2Match = adminSecret === fallbackSecret;
+    const token3Match = adminSecret === 'Admin!Kottravai2025%100';
+    
+    console.log('🔐 [authenticateAdmin] Token matches system secret?', token1Match);
+    console.log('🔐 [authenticateAdmin] Token matches fallback secret?', token2Match);
+    console.log('🔐 [authenticateAdmin] Token matches hardcoded default?', token3Match);
+
+    if (adminSecret && (token1Match || token2Match || token3Match)) {
+        console.log('✅ [authenticateAdmin] SUPER_ADMIN access granted');
         req.adminRole = 'SUPER_ADMIN';
         return next();
     }
 
     if (auditorSecret === 'read_only_audit') {
+        console.log('✅ [authenticateAdmin] AUDITOR access granted');
         if (req.method !== 'GET') return res.status(403).json({ error: 'Auditor has read-only access' });
         req.adminRole = 'AUDITOR';
         return next();
     }
 
+    console.error('❌ [authenticateAdmin] UNAUTHORIZED - no valid token');
+    console.error('❌ [authenticateAdmin] Provided token:', adminSecret ? `"${adminSecret}"` : 'NONE');
+    console.error('❌ [authenticateAdmin] Expected token:', `"${systemSecret}"`);
     return res.status(403).json({ error: 'Unauthorized admin access' });
 };
 
@@ -392,6 +414,39 @@ const runMigrations = async () => {
             ['referral_code', 'VARCHAR(255)'],
             ['total_gst_server', 'DECIMAL(10, 2)']
         ];
+
+        // Lead table columns for CRM capture and activity reporting
+        const leadCols = [
+            ['company_name', 'TEXT'],
+            ['source', 'TEXT'],
+            ['inquiry', 'TEXT'],
+            ['lead_type', 'TEXT'],
+            ['status', "TEXT DEFAULT 'new'"],
+            ['lead_score', 'INTEGER DEFAULT 0'],
+            ['ai_summary', 'TEXT'],
+            ['utm_source', 'TEXT'],
+            ['utm_medium', 'TEXT'],
+            ['utm_campaign', 'TEXT'],
+            ['last_contacted_at', 'TIMESTAMP WITH TIME ZONE'],
+            ['next_followup_at', 'TIMESTAMP WITH TIME ZONE']
+        ];
+
+        for (const [col, type] of leadCols) {
+            await db.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(() => { });
+        }
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS lead_activities (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+                activity_type TEXT NOT NULL,
+                activity_description TEXT,
+                performed_by UUID,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `).catch(() => { });
 
         for (const [col, type] of orderCols) {
             await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(() => { });
@@ -2471,11 +2526,24 @@ app.post('/api/wishlist/toggle', authenticateToken, async (req, res) => {
 app.post('/api/b2b-inquiry', verifyCaptcha, async (req, res) => {
     try {
         const { name, email, phone, company, location, products, quantity, notes } = req.body;
-
         const adminEmail = 'admin@kottravai.in';
 
+        const lead = await createLeadWithActivity(
+            {
+                name,
+                email,
+                phone,
+                company_name: company,
+                source: 'b2b_inquiry',
+                inquiry: `Company: ${company || 'Individual'}\nLocation: ${location || 'N/A'}\nProducts: ${products || 'N/A'}\nQuantity: ${quantity || 'N/A'}\nNotes: ${notes || 'N/A'}`
+            },
+            {
+                activity_type: 'Note Added',
+                activity_description: 'B2B inquiry received and lead created in CRM.',
+                metadata: { location, products, quantity, notes }
+            }
+        );
 
-        // Send emails with B2B reply-to routing
         await Promise.all([
             sendEmail({
                 to: adminEmail,
@@ -2491,7 +2559,7 @@ app.post('/api/b2b-inquiry', verifyCaptcha, async (req, res) => {
             })
         ]);
 
-        res.json({ status: 'success', message: 'Inquiry sent successfully' });
+        res.json({ status: 'success', message: 'Inquiry sent successfully', lead_id: lead?.id });
 
     } catch (error) {
         console.error('B2B Email Error:', error);
@@ -2622,6 +2690,22 @@ app.post('/api/custom-request', verifyCaptcha, async (req, res) => {
             type: 'custom'
         });
 
+        await createLeadWithActivity(
+            {
+                name,
+                email,
+                phone,
+                company_name: null,
+                source: 'custom_request',
+                inquiry: `Product: ${productName || 'Unknown'}\nRequestedText: ${requestedText || 'N/A'}\nReferenceImage: ${referenceImage ? 'Included' : 'None'}\nAllFields: ${JSON.stringify(allFields || [])}`
+            },
+            {
+                activity_type: 'Note Added',
+                activity_description: 'Product custom request submitted and lead created in CRM.',
+                metadata: { productName, customFields, allFields }
+            }
+        );
+
         res.json({ status: 'success', message: 'Custom request sent successfully' });
 
     } catch (error) {
@@ -2636,28 +2720,89 @@ app.post('/api/contact', verifyCaptcha, async (req, res) => {
         const { name, email, subject, message } = req.body;
 
         const adminEmail = 'admin@kottravai.in';
+        const isAckOnly = req.body._ack_only === true;
 
+        if (!isAckOnly) {
+            await createLeadWithActivity(
+                {
+                    name,
+                    email,
+                    phone: null,
+                    company_name: null,
+                    source: 'contact_form',
+                    inquiry: `${message}\nSubject: ${subject || 'General Inquiry'}`
+                },
+                {
+                    activity_type: 'Note Added',
+                    activity_description: 'Website contact form submitted and lead created in CRM.',
+                    metadata: { subject }
+                }
+            );
+        }
 
         // Send emails with support reply-to routing
         await Promise.all([
-            sendEmail({
+            ...(isAckOnly ? [] : [{
                 to: adminEmail,
                 subject: `New Contact Submission: ${subject || 'General Inquiry'}`,
                 html: getContactAdminTemplate(req.body),
                 type: 'contact'
-            }),
-            sendEmail({
+            }]),
+            {
                 to: email,
                 subject: `We Received Your Message - Kottravai`,
                 html: getContactUserTemplate(req.body),
                 type: 'contact'
-            })
+            }
         ]);
 
         res.json({ status: 'success', message: 'Message sent successfully' });
     } catch (error) {
         console.error('Contact Email Error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to send message.' });
+    }
+});
+
+// Generic lead capture route for newsletter, cart capture, and other website inquiries
+app.post('/api/leads/capture', async (req, res) => {
+    try {
+        const { name, email, phone, company_name, source, inquiry } = req.body;
+
+        if (!email || !source) {
+            return res.status(400).json({ status: 'error', message: 'Email and source are required.' });
+        }
+
+        const lead = await createLeadWithActivity(
+            {
+                name,
+                email,
+                phone,
+                company_name,
+                source,
+                inquiry
+            },
+            {
+                activity_type: 'Note Added',
+                activity_description: `Website lead captured from ${source}.`,
+                metadata: { source, inquiry }
+            }
+        );
+
+        res.status(201).json({ status: 'success', lead });
+    } catch (error) {
+        console.error('Lead Capture Error:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to capture lead.' });
+    }
+});
+
+// Trigger AI re-analysis for a specific lead
+app.post('/api/leads/:id/ai-analysis', async (req, res) => {
+    try {
+        const analysis = await analyzeLeadAIById(req.params.id);
+        res.status(200).json({ status: 'success', analysis });
+    } catch (error) {
+        console.error('Lead AI Reanalysis Error:', error);
+        res.status(500).json({ status: 'error', message: error.message || 'Failed to analyze lead.' });
     }
 });
 
@@ -2775,6 +2920,212 @@ app.get('/api/alliance/export', authenticateAdmin, async (req, res) => {
     } catch (err) {
         console.error('❌ Alliance Export Error:', err);
         res.status(500).send('Error generating export');
+    }
+});
+
+// Admin endpoint to export leads as CSV (Excel compatible)
+app.get('/api/leads/export', authenticateAdmin, async (req, res) => {
+    try {
+        console.log('📥 [/api/leads/export] Export request started');
+        console.log('📥 [/api/leads/export] Admin role:', req.adminRole);
+        
+        // Get available columns dynamically
+        const tableStructure = await db.query(`
+            SELECT column_name, data_type
+            FROM information_schema.columns 
+            WHERE table_name = 'leads'
+            ORDER BY ordinal_position;
+        `);
+        
+        const availableColumns = tableStructure.rows.map(r => r.column_name);
+        console.log('📥 [/api/leads/export] Available columns:', availableColumns.join(', '));
+        
+        const requestedColumns = [
+            'id', 'name', 'email', 'phone', 'company_name', 'source', 'lead_type', 
+            'priority', 'lead_score', 'utm_source', 'utm_medium', 'utm_campaign', 
+            'last_contacted_at', 'next_followup_at', 'created_at', 'status', 'inquiry', 'ai_summary'
+        ];
+        
+        const safeColumns = requestedColumns.filter(col => availableColumns.includes(col));
+        console.log('📥 [/api/leads/export] Safe columns to export:', safeColumns.join(', '));
+        console.log('📥 [/api/leads/export] Missing columns:', requestedColumns.filter(col => !safeColumns.includes(col)).join(', '));
+        
+        const query = `SELECT ${safeColumns.join(', ')} FROM leads ORDER BY created_at DESC`;
+        console.log('📥 [/api/leads/export] Executing query...');
+        
+        const result = await db.query(query);
+        const leads = result.rows || [];
+        
+        console.log('✅ [/api/leads/export] Query executed, rows:', leads.length);
+
+        // CSV Header
+        const csvHeader = safeColumns.map(col => 
+            col.replace(/_/g, ' ').toUpperCase()
+        ).join(',');
+        
+        let csv = csvHeader + '\n';
+        console.log('📥 [/api/leads/export] CSV header:', csvHeader);
+
+        leads.forEach((l, idx) => {
+            const row = safeColumns.map(col => {
+                const value = l[col];
+                
+                // Format dates
+                if (value && (col.includes('_at') || col === 'created_at')) {
+                    return `"${new Date(value).toLocaleString()}"`;
+                }
+                
+                // Escape quotes in text fields
+                if (typeof value === 'string') {
+                    return `"${value.replace(/"/g, '""')}"`;
+                }
+                
+                return value !== null && value !== undefined ? value : '';
+            });
+            csv += row.join(',') + '\n';
+        });
+
+        console.log('✅ [/api/leads/export] CSV generated, total size:', csv.length, 'bytes');
+        console.log('✅ [/api/leads/export] Setting response headers');
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
+        res.setHeader('Content-Length', csv.length);
+        
+        console.log('✅ [/api/leads/export] Response headers set');
+        console.log('✅ [/api/leads/export] Sending CSV response');
+        
+        res.status(200).send(csv);
+        
+        console.log('✅ [/api/leads/export] Export completed successfully');
+    } catch (err) {
+        console.error('❌ [/api/leads/export] Leads Export Error:', err);
+        console.error('❌ [/api/leads/export] Error stack:', err.stack);
+        res.status(500).json({ error: 'Error generating leads export', details: err.message });
+    }
+});
+
+// Admin Authentication Diagnostic Endpoint (for debugging)
+app.get('/api/health/admin-auth', async (req, res) => {
+    try {
+        const systemSecret = process.env.VITE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'Admin!Kottravai2025%100';
+        const fallbackSecret = 'Admin!Kottravai2025%100e';
+        const defaultSecret = 'Admin!Kottravai2025%100';
+        
+        res.json({
+            status: 'ok',
+            env_vite_admin_password: process.env.VITE_ADMIN_PASSWORD ? `"${process.env.VITE_ADMIN_PASSWORD}"` : 'NOT SET',
+            env_admin_password: process.env.ADMIN_PASSWORD ? `"${process.env.ADMIN_PASSWORD}"` : 'NOT SET',
+            system_secret_used: `"${systemSecret}"`,
+            fallback_secret: `"${fallbackSecret}"`,
+            default_secret: `"${defaultSecret}"`,
+            expected_tokens: [systemSecret, fallbackSecret, defaultSecret],
+            note: 'The first matching token will grant access'
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin endpoint to list leads (JSON) for admin UI
+app.get('/api/health/leads-table', async (req, res) => {
+    try {
+        console.log('🏥 [Health Check] Checking leads table...');
+        
+        // Check if table exists
+        const tableExists = await db.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'leads'
+            );
+        `);
+        
+        if (!tableExists.rows[0].exists) {
+            return res.status(500).json({ 
+                error: 'Leads table does not exist',
+                advice: 'Run server startup migration'
+            });
+        }
+        
+        // Get table structure
+        const structure = await db.query(`
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns 
+            WHERE table_name = 'leads'
+            ORDER BY ordinal_position;
+        `);
+        
+        // Get row count
+        const count = await db.query(`SELECT COUNT(*) as count FROM leads`);
+        
+        // Get first row sample
+        const sample = await db.query(`SELECT * FROM leads LIMIT 1`);
+        
+        res.json({
+            status: 'ok',
+            table_exists: true,
+            columns: structure.rows,
+            row_count: count.rows[0].count,
+            first_row_sample: sample.rows[0] || null,
+            column_count: structure.rows.length
+        });
+    } catch (err) {
+        console.error('🏥 [Health Check] Error:', err);
+        res.status(500).json({ 
+            error: 'Health check failed',
+            details: err.message
+        });
+    }
+});
+
+// Leads Fetch Endpoint
+app.get('/api/leads', authenticateAdmin, async (req, res) => {
+    try {
+        console.log('🔍 [/api/leads] Processing leads request');
+        console.log('🔍 [/api/leads] User:', req.user);
+        
+        // First check if leads table exists and what columns it has
+        const tableCheckQuery = `
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'leads'
+            ORDER BY ordinal_position;
+        `;
+        
+        console.log('🔍 [/api/leads] Checking table structure...');
+        const tableStructure = await db.query(tableCheckQuery);
+        console.log('✅ [/api/leads] Table columns found:', tableStructure.rows.map(r => r.column_name).join(', '));
+        
+        const availableColumns = tableStructure.rows.map(r => r.column_name);
+        
+        // Build SELECT dynamically based on available columns
+        const requestedColumns = [
+            'id', 'name', 'email', 'phone', 'company_name', 'source', 'lead_type', 
+            'priority', 'lead_score', 'utm_source', 'utm_medium', 'utm_campaign', 
+            'last_contacted_at', 'next_followup_at', 'created_at', 'status', 'inquiry', 'ai_summary'
+        ];
+        
+        const safeColumns = requestedColumns.filter(col => availableColumns.includes(col));
+        console.log('✅ [/api/leads] Safe columns to select:', safeColumns.join(', '));
+        console.log('⚠️ [/api/leads] Missing columns:', requestedColumns.filter(col => !safeColumns.includes(col)).join(', '));
+        
+        const query = `SELECT ${safeColumns.join(', ')} FROM leads ORDER BY created_at DESC LIMIT 200`;
+        console.log('🔍 [/api/leads] Executing query with', safeColumns.length, 'columns');
+        
+        const result = await db.query(query);
+        
+        console.log('✅ [/api/leads] Query executed successfully');
+        console.log('✅ [/api/leads] Rows count:', result.rows?.length || 0);
+        console.log('✅ [/api/leads] First row sample:', result.rows?.[0] || 'NO DATA');
+        console.log('✅ [/api/leads] Column names returned:', Object.keys(result.rows?.[0] || {}));
+        
+        const response = result.rows || [];
+        console.log('✅ [/api/leads] Sending response with', response.length, 'leads');
+        res.json(response);
+    } catch (err) {
+        console.error('❌ [/api/leads] Leads Fetch Error:', err);
+        console.error('❌ [/api/leads] Error stack:', err.stack);
+        res.status(500).json({ error: 'Failed to fetch leads', details: err.message });
     }
 });
 
@@ -3345,6 +3696,143 @@ app.get('/api/recover-order/:payment_id', async (req, res) => {
         res.json({ success: true, message: 'Order recovered successfully', order: result.order });
     } catch (err) {
         res.status(500).json({ error: 'RECOVERY_FAILED', message: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📋 LEADS API — Phase 1: Lead Capture & Qualification System
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/leads
+ * Lists all leads with optional filters. Admin-only.
+ * Query params: status, source, lead_type, priority, limit, offset
+ */
+app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
+    try {
+        const { status, source, lead_type, priority, limit = 50, offset = 0 } = req.query;
+
+        let query = supabase
+            .from('leads')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+        if (status)    query = query.eq('status', status);
+        if (source)    query = query.eq('source', source);
+        if (lead_type) query = query.eq('lead_type', lead_type);
+        if (priority)  query = query.eq('priority', priority);
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            console.error('[Leads] Supabase fetch error:', error.message);
+            return res.status(500).json({ error: 'Failed to fetch leads', details: error.message });
+        }
+
+        // Compute dashboard stats
+        const statsQuery = await supabase
+            .from('leads')
+            .select('status, lead_type, source');
+
+        const allLeads = statsQuery.data || [];
+        const totalLeads     = allLeads.length;
+        const newLeads       = allLeads.filter(l => l.status === 'new').length;
+        const qualifiedLeads = allLeads.filter(l => l.status === 'qualified').length;
+        const convertedLeads = allLeads.filter(l => l.status === 'converted').length;
+        const conversionRate = totalLeads > 0
+            ? Math.round((convertedLeads / totalLeads) * 100)
+            : 0;
+
+        res.json({
+            success: true,
+            leads: data || [],
+            total: count || 0,
+            stats: { totalLeads, newLeads, qualifiedLeads, convertedLeads, conversionRate }
+        });
+    } catch (err) {
+        console.error('[Leads] GET /api/admin/leads error:', err.message);
+        res.status(500).json({ error: 'Server error fetching leads' });
+    }
+});
+
+/**
+ * PATCH /api/admin/leads/:id
+ * Update lead status, priority, notes, next_followup_at. Admin-only.
+ */
+app.patch('/api/admin/leads/:id', authenticateAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, priority, notes, next_followup_at } = req.body;
+
+        const updates = {};
+        if (status)           updates.status = status;
+        if (priority)         updates.priority = priority;
+        if (notes !== undefined) updates.notes = notes;
+        if (next_followup_at) updates.next_followup_at = next_followup_at;
+
+        const { data, error } = await supabase
+            .from('leads')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[Leads] Supabase update error:', error.message);
+            return res.status(500).json({ error: 'Failed to update lead', details: error.message });
+        }
+
+        // Log admin action
+        console.log(`[Leads] Admin updated lead ${id}:`, updates);
+        res.json({ success: true, lead: data });
+    } catch (err) {
+        console.error('[Leads] PATCH /api/admin/leads/:id error:', err.message);
+        res.status(500).json({ error: 'Server error updating lead' });
+    }
+});
+
+/**
+ * GET /api/admin/leads/export
+ * Download all leads as CSV. Admin-only.
+ */
+app.get('/api/admin/leads/export', authenticateAdmin, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('leads')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const leads = data || [];
+        const headers = [
+            'id','created_at','name','email','phone','company_name',
+            'lead_type','source','status','priority','lead_score',
+            'utm_source','utm_medium','utm_campaign','notes',
+            'last_contacted_at','next_followup_at'
+        ];
+
+        const escape = (v) => {
+            if (v === null || v === undefined) return '';
+            const str = String(v);
+            return str.includes(',') || str.includes('"') || str.includes('\n')
+                ? `"${str.replace(/"/g, '""')}"`
+                : str;
+        };
+
+        const rows = leads.map(l =>
+            headers.map(h => escape(l[h])).join(',')
+        );
+
+        const csv = [headers.join(','), ...rows].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="kottravai_leads_${Date.now()}.csv"`);
+        res.send(csv);
+    } catch (err) {
+        console.error('[Leads] Export error:', err.message);
+        res.status(500).json({ error: 'CSV export failed' });
     }
 });
 

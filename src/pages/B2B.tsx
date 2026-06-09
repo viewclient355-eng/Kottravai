@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Helmet } from 'react-helmet-async';
 import MainLayout from '@/layouts/MainLayout';
 import { Leaf, Gift, FileText, Send, Building2, UserCheck, Briefcase, ChevronRight, Palmtree, Sparkles } from 'lucide-react';
+import { captureLead } from '@/services/leadService';
 import { useReviews } from '@/context/ReviewContext';
 import HampersRow from '@/components/home/HampersRow';
 import ExploreCategories from '@/components/home/ExploreCategories';
@@ -50,6 +51,15 @@ const B2B = () => {
             if (response.ok) {
                 setStatus('success');
                 setMessage('Thank you! We received your inquiry and will contact you soon.');
+                // 📋 Lead Capture — silent, non-blocking, AI classifies based on products + notes
+                captureLead({
+                    name: formData.name,
+                    email: formData.email,
+                    phone: formData.phone,
+                    company_name: formData.company,
+                    source: 'b2b_inquiry',
+                    notes: `Products: ${formData.products}. Quantity: ${formData.quantity}. Location: ${formData.location}. Notes: ${formData.notes}`,
+                }).catch(() => {});
                 setFormData({
                     name: '', email: '', phone: '', company: '',
                     location: '', products: '', quantity: '', notes: ''

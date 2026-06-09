@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Helmet } from 'react-helmet-async';
 import MainLayout from '@/layouts/MainLayout';
 import analytics from '@/utils/analyticsService';
+import { captureLead } from '@/services/leadService';
 import {
     Mail,
     Phone,
@@ -44,6 +45,13 @@ const Contact = () => {
                 form_subject: formData.subject || `Contact from ${formData.name}`,
                 order_id: formData.orderId || undefined
             });
+            // 📋 Lead Capture — silent, non-blocking
+            captureLead({
+                name: formData.name,
+                email: formData.email,
+                source: 'contact_form',
+                notes: `Subject: ${formData.subject}\n${formData.message}${formData.orderId ? `\nOrder ID: ${formData.orderId}` : ''}`,
+            }).catch(() => {});
             setStatus('success');
             setFormData({ name: '', email: '', subject: '', orderId: '', message: '' });
             setTimeout(() => setStatus('idle'), 5000);

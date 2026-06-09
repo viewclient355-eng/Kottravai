@@ -68,13 +68,243 @@ import { categories } from "@/data/products";
 import toast from "react-hot-toast";
 import { compressImage } from "../../utils/imageCompressor";
 import ImageOptimizer from "./ImageOptimizer";
+import LeadsView from "./LeadsView";
 import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 // import { supabase } from '@/utils/supabaseClient';
 import { API_BASE } from "@/config/api";
+import React from "react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LeadsView — Phase 1: Lead Capture & Qualification System
+// ─────────────────────────────────────────────────────────────────────────────
+const LeadsView = () => {
+  const [lFilter, setLFilter] = React.useState({ status: "all", source: "all", priority: "all" });
+  const [lLoading, setLLoading] = React.useState(false);
+  const [lLeads, setLLeads] = React.useState<any[]>([]);
+  const [lStats, setLStats] = React.useState({ totalLeads: 0, newLeads: 0, qualifiedLeads: 0, convertedLeads: 0, conversionRate: 0 });
+  const [lTotal, setLTotal] = React.useState(0);
+  const [lPage, setLPage] = React.useState(0);
+  const PAGE_SIZE = 20;
+
+  const loadLeads = React.useCallback(async (page = 0, filter = { status: "all", source: "all", priority: "all" }) => {
+    setLLoading(true);
+    try {
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) };
+      if (filter.status !== "all") params.status = filter.status;
+      if (filter.source !== "all") params.source = filter.source;
+      if (filter.priority !== "all") params.priority = filter.priority;
+      const qs = new URLSearchParams(params).toString();
+      const res = await axios.get(`${API_BASE}/api/admin/leads?${qs}`, { headers: { "X-Admin-Secret": adminSecret } });
+      if (res.data.success) {
+        setLLeads(res.data.leads || []);
+        setLTotal(res.data.total || 0);
+        setLStats(res.data.stats);
+      }
+    } catch {
+      toast.error("Failed to load leads");
+    } finally {
+      setLLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { loadLeads(0, lFilter); }, [loadLeads]);
+
+  const updateStatus = async (id: string, status: string) => {
+    try {
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      await axios.patch(`${API_BASE}/api/admin/leads/${id}`, { status }, { headers: { "X-Admin-Secret": adminSecret } });
+      toast.success(`Lead marked as ${status}`);
+      if (status === "qualified") {
+        import("@/utils/analyticsService").then(m => m.default.trackEvent("lead_qualified", { lead_id: id })).catch(() => {});
+      }
+      loadLeads(lPage, lFilter);
+    } catch { toast.error("Update failed"); }
+  };
+
+  const exportCSV = () => {
+    const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+    const a = document.createElement("a");
+    a.href = `${API_BASE}/api/admin/leads/export?token=${adminSecret}`;
+    a.download = `kottravai_leads_${Date.now()}.csv`;
+    a.click();
+  };
+
+  const STATUS_COLORS: Record<string, string> = {
+    new: "bg-blue-100 text-blue-700",
+    qualified: "bg-emerald-100 text-emerald-700",
+    converted: "bg-purple-100 text-purple-700",
+    disqualified: "bg-gray-100 text-gray-500",
+  };
+  const PRIORITY_COLORS: Record<string, string> = {
+    high: "bg-red-100 text-red-600",
+    medium: "bg-yellow-100 text-yellow-700",
+    low: "bg-gray-100 text-gray-500",
+  };
+  const TYPE_LABELS: Record<string, string> = {
+    corporate_gifting: "Corporate",
+    wedding: "Wedding",
+    retail: "Retail",
+    general: "General",
+  };
+
+  return (
+    <div className="p-6 lg:p-10 space-y-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-[#2D1B4E]">Lead Pipeline</h1>
+          <p className="text-gray-500 text-sm mt-1">All captured leads from forms, newsletter &amp; cart</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => loadLeads(0, lFilter)} className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition">
+            <RefreshCw size={13} /> Refresh
+          </button>
+          <button onClick={exportCSV} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition">
+            <FileText size={13} /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {[
+          { label: "Total Leads", value: lStats.totalLeads, color: "from-[#2D1B4E] to-[#8E2A8B]" },
+          { label: "New", value: lStats.newLeads, color: "from-blue-500 to-blue-600" },
+          { label: "Qualified", value: lStats.qualifiedLeads, color: "from-emerald-500 to-emerald-600" },
+          { label: "Converted", value: lStats.convertedLeads, color: "from-purple-500 to-purple-600" },
+          { label: "Conversion %", value: `${lStats.conversionRate}%`, color: "from-amber-400 to-orange-500" },
+        ].map((s, i) => (
+          <div key={i} className={`bg-gradient-to-br ${s.color} rounded-2xl p-5 shadow-lg`}>
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">{s.label}</p>
+            <p className="text-3xl font-black text-white">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+        {[
+          { key: "status", label: "Status", options: ["all", "new", "qualified", "converted", "disqualified"] },
+          { key: "source", label: "Source", options: ["all", "contact_form", "b2b_inquiry", "newsletter", "cart_capture"] },
+          { key: "priority", label: "Priority", options: ["all", "high", "medium", "low"] },
+        ].map(f => (
+          <div key={f.key} className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{f.label}:</span>
+            <select
+              value={(lFilter as any)[f.key]}
+              onChange={e => {
+                const next = { ...lFilter, [f.key]: e.target.value };
+                setLFilter(next);
+                setLPage(0);
+                loadLeads(0, next);
+              }}
+              className="text-xs font-bold bg-white border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#8E2A8B]/40"
+            >
+              {f.options.map(o => <option key={o} value={o}>{o === "all" ? "All" : o.replace(/_/g, " ")}</option>)}
+            </select>
+          </div>
+        ))}
+        <span className="text-[10px] text-gray-400 ml-auto self-center">{lTotal} total results</span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {lLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8E2A8B]"></div>
+          </div>
+        ) : lLeads.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+            <Users size={32} className="mb-2 opacity-30" />
+            <p className="text-sm">No leads yet. Submit a contact or B2B form to test.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  {["Name", "Email", "Type", "Source", "Priority", "Score", "Status", "Date", "Actions"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {lLeads.map((lead: any) => (
+                  <tr key={lead.id} className="hover:bg-gray-50/50 transition">
+                    <td className="px-4 py-3">
+                      <p className="font-bold text-[#2D1B4E] text-xs">{lead.name}</p>
+                      {lead.company_name && <p className="text-[10px] text-gray-400">{lead.company_name}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{lead.email}</td>
+                    <td className="px-4 py-3">
+                      <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                        {TYPE_LABELS[lead.lead_type] || lead.lead_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-gray-500">{lead.source?.replace(/_/g, " ")}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${PRIORITY_COLORS[lead.priority] || ""}`}>
+                        {lead.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-bold text-gray-600">{lead.lead_score}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[lead.status] || ""}`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-gray-400">
+                      {new Date(lead.created_at).toLocaleDateString("en-IN")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={lead.status}
+                        onChange={e => updateStatus(lead.id, e.target.value)}
+                        className="text-[10px] font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none"
+                      >
+                        <option value="new">New</option>
+                        <option value="qualified">Qualified</option>
+                        <option value="converted">Converted</option>
+                        <option value="disqualified">Disqualified</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {lTotal > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <button
+            disabled={lPage === 0}
+            onClick={() => { const p = lPage - 1; setLPage(p); loadLeads(p, lFilter); }}
+            className="px-4 py-2 text-xs font-bold bg-gray-100 hover:bg-gray-200 rounded-xl disabled:opacity-40 transition"
+          >
+            ← Previous
+          </button>
+          <span className="text-xs text-gray-500">Page {lPage + 1} of {Math.ceil(lTotal / PAGE_SIZE)}</span>
+          <button
+            disabled={(lPage + 1) * PAGE_SIZE >= lTotal}
+            onClick={() => { const p = lPage + 1; setLPage(p); loadLeads(p, lFilter); }}
+            className="px-4 py-2 text-xs font-bold bg-gray-100 hover:bg-gray-200 rounded-xl disabled:opacity-40 transition"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AdminDashboard = () => {
+
   const navigate = useNavigate();
   const {
     products,
@@ -117,7 +347,51 @@ const AdminDashboard = () => {
     | "affiliate-partners"
     | "affiliate-dashboard"
     | "affiliate-payouts"
+  | "leads"
   >("dashboard");
+
+  // Leads state
+  const [leadsData, setLeadsData] = useState<any[]>([]);
+  const fetchLeads = async () => {
+    try {
+      console.log('🔍 [AdminDashboard] Fetching leads from API...');
+      
+      // Check sessionStorage
+      const storedToken = sessionStorage.getItem("kottravai_admin_token");
+      console.log('🔍 [AdminDashboard] Token in sessionStorage:', storedToken ? `"${storedToken.substring(0, 30)}..."` : 'NOT FOUND');
+      
+      // Determine token to use
+      const adminToken = storedToken || "Admin!Kottravai2025%100";
+      console.log('🔍 [AdminDashboard] Token being sent:', `"${adminToken.substring(0, 30)}..."`);
+      console.log('🔍 [AdminDashboard] Token length:', adminToken.length);
+      console.log('🔍 [AdminDashboard] Full token:', `"${adminToken}"`);
+      
+      // Prepare headers
+      const headers = {
+        "x-admin-secret": adminToken,
+      };
+      console.log('🔍 [AdminDashboard] Request headers:', headers);
+      console.log('🔍 [AdminDashboard] API endpoint:', `${API_BASE}/api/leads`);
+      
+      const response = await axios.get(`${API_BASE}/api/leads`, { headers });
+      
+      console.log('✅ [AdminDashboard] Raw API response:', response);
+      console.log('✅ [AdminDashboard] Response data:', response.data);
+      console.log('✅ [AdminDashboard] Response data type:', typeof response.data);
+      console.log('✅ [AdminDashboard] Is array?:', Array.isArray(response.data));
+      console.log('✅ [AdminDashboard] Array length:', response.data?.length || 0);
+      
+      const leads = response.data || [];
+      console.log('✅ [AdminDashboard] Setting leadsData to:', leads);
+      setLeadsData(leads);
+    } catch (err: any) {
+      console.error("❌ Failed to fetch leads:", err);
+      console.error('❌ Error status:', err.response?.status);
+      console.error('❌ Error data:', err.response?.data);
+      console.error('❌ Error message:', err.message);
+      console.error('❌ Error headers:', err.response?.headers);
+    }
+  };
 
   // Admin Session Guard
   useEffect(() => {
@@ -127,6 +401,14 @@ const AdminDashboard = () => {
       navigate("/admin/login");
     } else {
       setIsAdminAuthenticated(true);
+      
+      // Log token information on mount for debugging
+      const storedToken = sessionStorage.getItem("kottravai_admin_token");
+      console.log('🔐 [AdminDashboard] On mount - Admin session:', isAdmin);
+      console.log('🔐 [AdminDashboard] On mount - Token in sessionStorage:', storedToken ? `"${storedToken.substring(0, 30)}..."` : 'NOT FOUND');
+      console.log('🔐 [AdminDashboard] On mount - Token length:', storedToken?.length || 0);
+      console.log('🔐 [AdminDashboard] On mount - Full token:', storedToken ? `"${storedToken}"` : 'NONE');
+      
       // Fetch all orders and products specifically for admin use
       fetchAllOrders();
       fetchProducts();
@@ -1657,6 +1939,12 @@ const AdminDashboard = () => {
                   label: "User Insights",
                   active: view === "users",
                 },
+                  {
+                    view: "leads",
+                    icon: MessageSquareQuote,
+                    label: "Leads",
+                    active: view === "leads",
+                  },
               ].map((item, idx) => (
                 <button
                   key={idx}
@@ -1667,6 +1955,9 @@ const AdminDashboard = () => {
                     }
                     if (item.view === "orders") {
                       fetchAllOrders(true);
+                    }
+                    if (item.view === "leads") {
+                      fetchLeads();
                     }
                     setView(item.view as any);
                     resetForm();
@@ -1759,6 +2050,34 @@ const AdminDashboard = () => {
                   )}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Leads Section */}
+          <div className="space-y-4">
+            <p className="px-4 text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">
+              Lead Pipeline
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setView("leads");
+                  resetForm();
+                  setIsSidebarOpen(false);
+                  fetchLeads();
+                }}
+                className={`w-full text-left px-5 py-3 rounded-2xl transition-all duration-300 font-bold flex items-center justify-between group ${view === "leads" ? "sidebar-item-active" : "text-gray-400 hover:bg-white/5 hover:text-white"}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`p-2 rounded-xl transition-colors ${view === "leads" ? "bg-emerald-500/20" : "bg-gray-800 group-hover:bg-gray-700"}`}>
+                    <Users size={18} className={view === "leads" ? "text-emerald-400" : ""} />
+                  </div>
+                  <span className="text-sm">Leads</span>
+                </div>
+                {view === "leads" && (
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></div>
+                )}
+              </button>
             </div>
           </div>
 
@@ -1855,6 +2174,8 @@ const AdminDashboard = () => {
                           ? "Order Stream"
                           : view === "users"
                             ? "Monitoring"
+                            : view === "leads"
+                              ? "Leads"
                             : view === "partners"
                               ? "Alliances"
                               : view === "alliance-apps"
@@ -1963,6 +2284,12 @@ const AdminDashboard = () => {
         </header>
 
         <div className="p-8">
+          {view === "leads" && (
+            <>
+              {console.log('🎯 [LeadsView] Rendering with leadsData:', leadsData)}
+              <LeadsView leadsData={leadsData} />
+            </>
+          )}
           {view === "dashboard" ? (
             <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
               {/* Dashboard Header */}
@@ -5825,7 +6152,7 @@ const AdminDashboard = () => {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : view === "list" ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white">
                 <h3 className="text-xl font-bold text-[#2D1B4E] flex items-center gap-2">
@@ -6134,7 +6461,9 @@ const AdminDashboard = () => {
                 </tbody>
               </table>
             </div>
-          )}
+          ) : view === "leads" ? (
+            <LeadsView />
+          ) : null}
         </div>
       </main>
     </div>
