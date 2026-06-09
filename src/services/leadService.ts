@@ -123,15 +123,10 @@ const getUTM = () => {
 };
 
 // ─────────────────────────────────────────────
-// Supabase Persist
+// Supabase Persist via Backend API
 // ─────────────────────────────────────────────
-/**
- * Saves a lead to Supabase, auto-classifying and scoring if not overridden.
- * Returns the inserted row or throws.
- */
 export const saveLead = async (data: LeadData): Promise<SavedLead | null> => {
     try {
-        // Build combined text for classification
         const textForClassification = [
             data.notes || '',
             data.company_name || '',
@@ -150,8 +145,7 @@ export const saveLead = async (data: LeadData): Promise<SavedLead | null> => {
             company_name: data.company_name?.trim() || null,
             lead_type,
             source: data.source,
-            status: 'new' as LeadStatus,
-            notes: data.notes?.trim() || null,
+            inquiry: data.notes?.trim() || null, // map notes to inquiry for backend
             priority,
             lead_score,
             utm_source: utm.utm_source || null,
@@ -159,17 +153,21 @@ export const saveLead = async (data: LeadData): Promise<SavedLead | null> => {
             utm_campaign: utm.utm_campaign || null,
         };
 
-        const { error } = await supabase
-            .from('leads')
-            .insert([payload]);
+        const response = await fetch(API_ENDPOINTS.leads ? API_ENDPOINTS.leads + '/capture' : '/api/leads/capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-        if (error) {
-            console.error('[LeadService] Supabase insert error:', error.message);
-            return null;
+        if (!response.ok) {
+            throw new Error(`Failed to capture lead: ${response.statusText}`);
         }
 
-        console.log('[LeadService] Lead saved: | type:', lead_type, '| score:', lead_score);
-        return { ...payload, id: 'temp-id', created_at: new Date().toISOString() } as SavedLead;
+        const json = await response.json();
+        const inserted = json.lead;
+
+        console.log('[LeadService] Lead saved & AI analyzed: | type:', lead_type, '| score:', inserted.lead_score);
+        return inserted as SavedLead;
     } catch (err) {
         console.error('[LeadService] Unexpected error saving lead:', err);
         return null;
@@ -225,11 +223,9 @@ export const trackLeadEvent = (
 // Saves + sends ACK + tracks — call this from all forms
 // ─────────────────────────────────────────────
 export const captureLead = async (data: LeadData): Promise<void> => {
-    const [saved] = await Promise.allSettled([
-        saveLead(data),
-    ]);
+    const saved = await saveLead(data);
 
-    const leadId = saved.status === 'fulfilled' ? saved.value?.id : undefined;
+    const leadId = saved?.id;
 
     // Fire ACK email (non-blocking)
     sendAcknowledgementEmail(data.name, data.email, data.source).catch(() => {});

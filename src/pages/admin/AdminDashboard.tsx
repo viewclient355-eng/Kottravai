@@ -235,7 +235,7 @@ const LeadsView = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Name", "Email", "Type", "Source", "Priority", "Score", "Status", "Date", "Actions"].map(h => (
+                  {["Name", "Email", "Type", "Source", "Priority", "Score", "Temp", "Qual Status", "AI Summary", "Next Action", "Status", "Date", "Actions"].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
@@ -260,6 +260,22 @@ const LeadsView = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs font-bold text-gray-600">{lead.lead_score}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${lead.lead_temperature === 'hot' ? 'bg-red-100 text-red-600' : lead.lead_temperature === 'warm' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {lead.lead_temperature === 'hot' ? '🔥 Hot' : lead.lead_temperature === 'warm' ? '☀️ Warm' : '❄️ Cold'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                        {lead.qualification_status?.replace(/_/g, ' ') || 'New'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-gray-600 max-w-[150px] truncate" title={lead.ai_summary}>
+                      {lead.ai_summary || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-gray-600 max-w-[150px] truncate" title={lead.ai_next_action}>
+                      {lead.ai_next_action || '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[lead.status] || ""}`}>
                         {lead.status}

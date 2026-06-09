@@ -35,6 +35,7 @@ const fs = require('fs');
 const { sendEmail } = require('./utils/mailer');
 const { sendWhatsAppOTP } = require('./utils/whatsapp');
 const { createLeadWithActivity, analyzeLeadAIById } = require('./utils/leadHelpers');
+const aiLeadQualificationService = require('./services/aiLeadQualificationService');
 const {
     getB2BAdminTemplate,
     getB2BUserTemplate,
@@ -2766,27 +2767,35 @@ app.post('/api/contact', verifyCaptcha, async (req, res) => {
 // Generic lead capture route for newsletter, cart capture, and other website inquiries
 app.post('/api/leads/capture', async (req, res) => {
     try {
-        const { name, email, phone, company_name, source, inquiry } = req.body;
+        const payload = req.body;
 
-        if (!email || !source) {
+        if (!payload.email || !payload.source) {
             return res.status(400).json({ status: 'error', message: 'Email and source are required.' });
         }
 
-        const lead = await createLeadWithActivity(
-            {
-                name,
-                email,
-                phone,
-                company_name,
-                source,
-                inquiry
-            },
-            {
-                activity_type: 'Note Added',
-                activity_description: `Website lead captured from ${source}.`,
-                metadata: { source, inquiry }
-            }
-        );
+        // Insert lead using service role
+        const { data: lead, error: insertErr } = await supabase.from('leads').insert([payload]).select().single();
+        if (insertErr) throw new Error('Insert failed: ' + insertErr.message);
+
+        // Run AI Analysis immediately
+        let analysis = null;
+        try {
+            analysis = await aiLeadQualificationService.analyzeLead(lead);
+            await supabase.from('leads').update({
+                ai_summary: analysis.ai_summary,
+                ai_reasoning: analysis.ai_reasoning,
+                lead_score: analysis.lead_score,
+                lead_temperature: analysis.lead_temperature,
+                priority: analysis.priority,
+                qualification_status: analysis.qualification_status,
+                ai_next_action: analysis.ai_next_action
+            }).eq('id', lead.id);
+            
+            // Merge AI results back into lead for response
+            Object.assign(lead, analysis);
+        } catch (aiErr) {
+            console.error('AI Analysis during capture failed:', aiErr.message);
+        }
 
         res.status(201).json({ status: 'success', lead });
     } catch (error) {
@@ -2798,7 +2807,24 @@ app.post('/api/leads/capture', async (req, res) => {
 // Trigger AI re-analysis for a specific lead
 app.post('/api/leads/:id/ai-analysis', async (req, res) => {
     try {
-        const analysis = await analyzeLeadAIById(req.params.id);
+        const { id } = req.params;
+        const { data: lead, error: fetchErr } = await supabase.from('leads').select('*').eq('id', id).single();
+        if (fetchErr || !lead) throw new Error('Lead not found');
+
+        const analysis = await aiLeadQualificationService.analyzeLead(lead);
+
+        const { error: updateErr } = await supabase.from('leads').update({
+            ai_summary: analysis.ai_summary,
+            ai_reasoning: analysis.ai_reasoning,
+            lead_score: analysis.lead_score,
+            lead_temperature: analysis.lead_temperature,
+            priority: analysis.priority,
+            qualification_status: analysis.qualification_status,
+            ai_next_action: analysis.ai_next_action
+        }).eq('id', id);
+
+        if (updateErr) throw new Error('Failed to update lead with AI data: ' + updateErr.message);
+
         res.status(200).json({ status: 'success', analysis });
     } catch (error) {
         console.error('Lead AI Reanalysis Error:', error);
