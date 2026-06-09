@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { useProducts } from "@/context/ProductContext";
 import { useVideos } from "@/context/VideoContext";
 import { useNews } from "@/context/NewsContext";
@@ -74,21 +74,21 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 // import { supabase } from '@/utils/supabaseClient';
 import { API_BASE } from "@/config/api";
-import React from "react";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LeadsView — Phase 1: Lead Capture & Qualification System
 // ─────────────────────────────────────────────────────────────────────────────
 const LeadsView = () => {
-  const [lFilter, setLFilter] = React.useState({ status: "all", source: "all", priority: "all" });
-  const [lLoading, setLLoading] = React.useState(false);
-  const [lLeads, setLLeads] = React.useState<any[]>([]);
-  const [lStats, setLStats] = React.useState({ totalLeads: 0, newLeads: 0, qualifiedLeads: 0, convertedLeads: 0, conversionRate: 0 });
-  const [lTotal, setLTotal] = React.useState(0);
-  const [lPage, setLPage] = React.useState(0);
+  const [lFilter, setLFilter] = useState({ status: "all", source: "all", priority: "all" });
+  const [lLoading, setLLoading] = useState(false);
+  const [lLeads, setLLeads] = useState<any[]>([]);
+  const [lStats, setLStats] = useState({ totalLeads: 0, newLeads: 0, qualifiedLeads: 0, convertedLeads: 0, conversionRate: 0 });
+  const [lTotal, setLTotal] = useState(0);
+  const [lPage, setLPage] = useState(0);
   const PAGE_SIZE = 20;
 
-  const loadLeads = React.useCallback(async (page = 0, filter = { status: "all", source: "all", priority: "all" }) => {
+  const loadLeads = useCallback(async (page = 0, filter = { status: "all", source: "all", priority: "all" }) => {
     setLLoading(true);
     try {
       const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
@@ -110,7 +110,7 @@ const LeadsView = () => {
     }
   }, []);
 
-  React.useEffect(() => { loadLeads(0, lFilter); }, [loadLeads]);
+  useEffect(() => { loadLeads(0, lFilter); }, [loadLeads]);
 
   const updateStatus = async (id: string, status: string) => {
     try {
