@@ -159,19 +159,17 @@ export const saveLead = async (data: LeadData): Promise<SavedLead | null> => {
             utm_campaign: utm.utm_campaign || null,
         };
 
-        const { data: inserted, error } = await supabase
+        const { error } = await supabase
             .from('leads')
-            .insert([payload])
-            .select()
-            .single();
+            .insert([payload]);
 
         if (error) {
             console.error('[LeadService] Supabase insert error:', error.message);
             return null;
         }
 
-        console.log('[LeadService] Lead saved:', inserted?.id, '| type:', lead_type, '| score:', lead_score);
-        return inserted as SavedLead;
+        console.log('[LeadService] Lead saved: | type:', lead_type, '| score:', lead_score);
+        return { ...payload, id: 'temp-id', created_at: new Date().toISOString() } as SavedLead;
     } catch (err) {
         console.error('[LeadService] Unexpected error saving lead:', err);
         return null;
