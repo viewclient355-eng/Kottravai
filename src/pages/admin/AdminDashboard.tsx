@@ -123,12 +123,22 @@ const LeadsView = () => {
     } catch { toast.error("Update failed"); }
   };
 
-  const exportCSV = () => {
-    const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
-    const a = document.createElement("a");
-    a.href = `${API_BASE}/api/admin/leads/export?token=${adminSecret}`;
-    a.download = `kottravai_leads_${Date.now()}.csv`;
-    a.click();
+  const exportCSV = async () => {
+    try {
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      const res = await axios.get(`${API_BASE}/api/admin/leads/export`, {
+        headers: { "X-Admin-Secret": adminSecret },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kottravai_leads_${Date.now()}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Export failed: Unauthorized or network error");
+    }
   };
 
   const STATUS_COLORS: Record<string, string> = {
