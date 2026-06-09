@@ -68,7 +68,6 @@ import { categories } from "@/data/products";
 import toast from "react-hot-toast";
 import { compressImage } from "../../utils/imageCompressor";
 import ImageOptimizer from "./ImageOptimizer";
-import LeadsView from "./LeadsView";
 import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -2284,12 +2283,6 @@ const AdminDashboard = () => {
         </header>
 
         <div className="p-8">
-          {view === "leads" && (
-            <>
-              {console.log('🎯 [LeadsView] Rendering with leadsData:', leadsData)}
-              <LeadsView leadsData={leadsData} />
-            </>
-          )}
           {view === "dashboard" ? (
             <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
               {/* Dashboard Header */}
