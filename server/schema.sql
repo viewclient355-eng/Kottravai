@@ -114,3 +114,33 @@ CREATE INDEX IF NOT EXISTS idx_otps_mobile ON otps(mobile);
 CREATE INDEX IF NOT EXISTS idx_email_otps_email ON email_otps(email);
 CREATE INDEX IF NOT EXISTS idx_wishlist_username ON wishlist(username);
 
+-- Leads Table (for contact capture and AI Sales agents)
+CREATE TABLE IF NOT EXISTS leads (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name TEXT,
+        email TEXT,
+        phone TEXT,
+        priority TEXT DEFAULT 'medium',
+        lead_score INTEGER DEFAULT 0,
+        utm_source TEXT,
+        utm_medium TEXT,
+        utm_campaign TEXT,
+        last_contacted_at TIMESTAMP WITH TIME ZONE,
+        next_followup_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'leads_priority_check') THEN
+        ALTER TABLE leads ADD CONSTRAINT leads_priority_check CHECK (priority IN ('low','medium','high'));
+    END IF;
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_leads_next_followup_at ON leads(next_followup_at);
+CREATE INDEX IF NOT EXISTS idx_leads_priority ON leads(priority);
+CREATE INDEX IF NOT EXISTS idx_leads_utm_source ON leads(utm_source);
+CREATE INDEX IF NOT EXISTS idx_leads_lead_type ON leads(lead_type);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
+

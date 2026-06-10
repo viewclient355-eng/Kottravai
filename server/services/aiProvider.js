@@ -6,34 +6,45 @@ class AIProviderService {
         console.log("🛠️ [RCA] INITIALIZING_AI_PROVIDERS...");
         this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         this.openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-        this.primaryProvider = 'gemini';
+        this.groq = process.env.GROQ_API_KEY ? new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" }) : null;
+        
+        // Auto-select primary provider based on availability
+        this.primaryProvider = this.groq ? 'groq' : (this.openai ? 'openai' : 'gemini');
         
         console.log("🛠️ [RCA] PROVIDER_STATUS:", {
             GEMINI: !!process.env.GEMINI_API_KEY,
-            OPENAI: !!process.env.OPENAI_API_KEY
+            OPENAI: !!process.env.OPENAI_API_KEY,
+            GROQ: !!process.env.GROQ_API_KEY
         });
     }
 
     async generateContent(systemPrompt, userMessage, history = [], options = {}) {
-        const provider = options.provider || this.primaryProvider;
+        // Enforce Groq as primary if available, otherwise Gemini. Completely bypass OpenAI.
+        const provider = this.groq ? 'groq' : 'gemini';
+        
+        console.log("[AI_PROVIDER_SELECTED]", provider);
+        console.log("[B2B_INQUIRY_AI_PROVIDER]", provider);
         console.log(`📡 [RCA] PROVIDER_CALL_START: ${provider}`);
         
         try {
-            if (provider === 'gemini') {
+            if (provider === 'groq') {
+                return await this._callGroq(systemPrompt, userMessage, history);
+            } else {
                 return await this._callGemini(systemPrompt, userMessage, history);
-            } else if (provider === 'openai' && this.openai) {
-                return await this._callOpenAI(systemPrompt, userMessage, history);
             }
-            throw new Error(`Provider ${provider} not available`);
         } catch (err) {
             console.error(`❌ [RCA] PROVIDER_ERROR (${provider}):`, err.message);
             
-            /* OpenAI Fallback Disabled for Stabilization
-            if (provider === 'gemini' && this.openai) {
-                console.warn("🔄 [RCA] INITIATING_FAILOVER_TO_OPENAI...");
-                return await this._callOpenAI(systemPrompt, userMessage, history);
+            // If Groq fails, fallback to Gemini
+            if (provider === 'groq' && this.gemini) {
+                console.warn("🔄 [RCA] INITIATING_FAILOVER_TO_GEMINI...");
+                try {
+                    return await this._callGemini(systemPrompt, userMessage, history);
+                } catch (geminiErr) {
+                    console.error("❌ [RCA] GEMINI_FAILOVER_ERROR:", geminiErr.message);
+                    throw geminiErr;
+                }
             }
-            */
             throw err;
         }
     }
@@ -90,6 +101,22 @@ class AIProviderService {
         });
         console.log("✅ [RCA] OPENAI_API_SUCCESS");
         return { text: response.choices[0].message.content, provider: 'openai' };
+    }
+
+    async _callGroq(systemPrompt, userMessage, history) {
+        console.log("📡 [RCA] GROQ_API_REQUEST_SENT");
+        const response = await this.groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                { role: "system", content: systemPrompt },
+                ...history.map(h => ({ role: h.role, content: h.content })),
+                { role: "user", content: userMessage }
+            ],
+            max_tokens: 1000,
+            response_format: { type: "json_object" } // Enforce JSON output for Groq
+        });
+        console.log("✅ [RCA] GROQ_API_SUCCESS");
+        return { text: response.choices[0].message.content, provider: 'groq' };
     }
 
     async getEmbedding(text) {

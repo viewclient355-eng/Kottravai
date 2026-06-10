@@ -73,24 +73,25 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 // import { supabase } from '@/utils/supabaseClient';
 import { API_BASE } from "@/config/api";
-
+import LeadCRMPanel from "./LeadCRMPanel";
+import { Lead } from "@/types/crm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LeadsView — Phase 1: Lead Capture & Qualification System
 // ─────────────────────────────────────────────────────────────────────────────
 const LeadsView = () => {
-  const [lFilter, setLFilter] = useState({ status: "all", source: "all", priority: "all" });
+  const [lFilter, setLFilter] = useState({ status: "all", source: "all", priority: "all", intent: "all", quality: "all", dealSize: "all" });
   const [lLoading, setLLoading] = useState(false);
-  const [lLeads, setLLeads] = useState<any[]>([]);
-  const [lStats, setLStats] = useState({ totalLeads: 0, newLeads: 0, qualifiedLeads: 0, convertedLeads: 0, conversionRate: 0 });
+  const [lLeads, setLLeads] = useState<Lead[]>([]);
   const [lTotal, setLTotal] = useState(0);
   const [lPage, setLPage] = useState(0);
+  const [expandedLead, setExpandedLead] = useState<string | null>(null);
   const PAGE_SIZE = 20;
 
   const loadLeads = useCallback(async (page = 0, filter = { status: "all", source: "all", priority: "all" }) => {
     setLLoading(true);
     try {
-      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "";
       const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) };
       if (filter.status !== "all") params.status = filter.status;
       if (filter.source !== "all") params.source = filter.source;
@@ -100,7 +101,6 @@ const LeadsView = () => {
       if (res.data.success) {
         setLLeads(res.data.leads || []);
         setLTotal(res.data.total || 0);
-        setLStats(res.data.stats);
       }
     } catch {
       toast.error("Failed to load leads");
@@ -113,7 +113,7 @@ const LeadsView = () => {
 
   const updateStatus = async (id: string, status: string) => {
     try {
-      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "";
       await axios.patch(`${API_BASE}/api/admin/leads/${id}`, { status }, { headers: { "X-Admin-Secret": adminSecret } });
       toast.success(`Lead marked as ${status}`);
       if (status === "qualified") {
@@ -125,7 +125,7 @@ const LeadsView = () => {
 
   const exportCSV = async () => {
     try {
-      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "";
       const res = await axios.get(`${API_BASE}/api/admin/leads/export`, {
         headers: { "X-Admin-Secret": adminSecret },
         responseType: "blob",
@@ -147,10 +147,20 @@ const LeadsView = () => {
     converted: "bg-purple-100 text-purple-700",
     disqualified: "bg-gray-100 text-gray-500",
   };
-  const PRIORITY_COLORS: Record<string, string> = {
-    high: "bg-red-100 text-red-600",
-    medium: "bg-yellow-100 text-yellow-700",
-    low: "bg-gray-100 text-gray-500",
+  const INTENT_COLORS: Record<string, string> = {
+    high: "bg-green-100 text-green-700",
+    medium: "bg-orange-100 text-orange-700",
+    low: "bg-red-100 text-red-700",
+  };
+  const QUALITY_COLORS: Record<string, string> = {
+    hot: "bg-red-100 text-red-700",
+    warm: "bg-orange-100 text-orange-700",
+    cold: "bg-gray-100 text-gray-700",
+  };
+  const DEAL_SIZE_COLORS: Record<string, string> = {
+    large: "bg-green-100 text-green-700",
+    medium: "bg-blue-100 text-blue-700",
+    small: "bg-gray-100 text-gray-700",
   };
   const TYPE_LABELS: Record<string, string> = {
     corporate_gifting: "Corporate",
@@ -158,6 +168,54 @@ const LeadsView = () => {
     retail: "Retail",
     general: "General",
   };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return "bg-green-500";
+    if (score >= 50) return "bg-orange-500";
+    return "bg-red-500";
+  };
+
+  // Client-side filtering
+  const filteredLeads = lLeads.filter(lead => {
+    if (lFilter.intent !== "all" && (lead.buying_intent || "").toLowerCase() !== lFilter.intent.toLowerCase()) return false;
+    const quality = lead.lead_quality || lead.lead_temperature || "";
+    if (lFilter.quality !== "all" && quality.toLowerCase() !== lFilter.quality.toLowerCase()) return false;
+    if (lFilter.dealSize !== "all" && (lead.estimated_deal_size || "").toLowerCase() !== lFilter.dealSize.toLowerCase()) return false;
+    return true;
+  });
+
+  const getDynamicPriority = (quality: string, intent: string) => {
+    const q = (quality || '').toLowerCase();
+    const i = (intent || '').toLowerCase();
+    if (q === 'hot' && i === 'high') return 'critical';
+    if (q === 'warm' && i === 'medium') return 'high';
+    if (q === 'cold' && i === 'low') return 'normal';
+    if (q === 'hot' || i === 'high') return 'high';
+    return 'normal';
+  };
+
+  const followupsTodayCount = lLeads.filter(l => {
+    if (!l.next_followup_at) return false;
+    const date = new Date(l.next_followup_at);
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  }).length;
+
+  const overdueFollowupsCount = lLeads.filter(l => {
+    if (!l.next_followup_at) return false;
+    const date = new Date(l.next_followup_at);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return date < today;
+  }).length;
+
+  const unassignedCount = lLeads.filter(l => !l.assigned_to).length;
+
+  const highPriorityCount = lLeads.filter(l => {
+    const p = getDynamicPriority(l.lead_quality || l.lead_temperature || "", l.buying_intent || "");
+    return p === 'critical' || p === 'high';
+  }).length;
+
 
   return (
     <div className="p-6 lg:p-10 space-y-8">
@@ -178,13 +236,12 @@ const LeadsView = () => {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Leads", value: lStats.totalLeads, color: "from-[#2D1B4E] to-[#8E2A8B]" },
-          { label: "New", value: lStats.newLeads, color: "from-blue-500 to-blue-600" },
-          { label: "Qualified", value: lStats.qualifiedLeads, color: "from-emerald-500 to-emerald-600" },
-          { label: "Converted", value: lStats.convertedLeads, color: "from-purple-500 to-purple-600" },
-          { label: "Conversion %", value: `${lStats.conversionRate}%`, color: "from-amber-400 to-orange-500" },
+          { label: "Follow-ups Today", value: followupsTodayCount, color: "from-blue-500 to-blue-600" },
+          { label: "Overdue Follow-ups", value: overdueFollowupsCount, color: "from-red-500 to-red-600" },
+          { label: "Unassigned Leads", value: unassignedCount, color: "from-orange-400 to-orange-500" },
+          { label: "High Priority", value: highPriorityCount, color: "from-emerald-500 to-emerald-600" },
         ].map((s, i) => (
           <div key={i} className={`bg-gradient-to-br ${s.color} rounded-2xl p-5 shadow-lg`}>
             <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">{s.label}</p>
@@ -199,6 +256,9 @@ const LeadsView = () => {
           { key: "status", label: "Status", options: ["all", "new", "qualified", "converted", "disqualified"] },
           { key: "source", label: "Source", options: ["all", "contact_form", "b2b_inquiry", "newsletter", "cart_capture"] },
           { key: "priority", label: "Priority", options: ["all", "high", "medium", "low"] },
+          { key: "quality", label: "Quality", options: ["all", "hot", "warm", "cold"] },
+          { key: "intent", label: "Intent", options: ["all", "high", "medium", "low"] },
+          { key: "dealSize", label: "Deal Size", options: ["all", "large", "medium", "small"] },
         ].map(f => (
           <div key={f.key} className="flex items-center gap-2">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{f.label}:</span>
@@ -207,8 +267,10 @@ const LeadsView = () => {
               onChange={e => {
                 const next = { ...lFilter, [f.key]: e.target.value };
                 setLFilter(next);
-                setLPage(0);
-                loadLeads(0, next);
+                if (f.key === "status" || f.key === "source" || f.key === "priority") {
+                  setLPage(0);
+                  loadLeads(0, next);
+                }
               }}
               className="text-xs font-bold bg-white border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#8E2A8B]/40"
             >
@@ -225,79 +287,213 @@ const LeadsView = () => {
           <div className="flex items-center justify-center h-40">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8E2A8B]"></div>
           </div>
-        ) : lLeads.length === 0 ? (
+        ) : filteredLeads.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-gray-400">
             <Users size={32} className="mb-2 opacity-30" />
-            <p className="text-sm">No leads yet. Submit a contact or B2B form to test.</p>
+            <p className="text-sm">No leads match the selected filters.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Name", "Email", "Type", "Source", "Priority", "Score", "Temp", "Qual Status", "AI Summary", "Next Action", "Status", "Date", "Actions"].map(h => (
+                  {["Name", "Type", "Score", "Intent", "Quality", "Deal Size", "Status", "Date", "Actions"].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {lLeads.map((lead: any) => (
-                  <tr key={lead.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-[#2D1B4E] text-xs">{lead.name}</p>
-                      {lead.company_name && <p className="text-[10px] text-gray-400">{lead.company_name}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">{lead.email}</td>
-                    <td className="px-4 py-3">
-                      <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full">
-                        {TYPE_LABELS[lead.lead_type] || lead.lead_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[10px] text-gray-500">{lead.source?.replace(/_/g, " ")}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${PRIORITY_COLORS[lead.priority] || ""}`}>
-                        {lead.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold text-gray-600">{lead.lead_score}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${lead.lead_temperature === 'hot' ? 'bg-red-100 text-red-600' : lead.lead_temperature === 'warm' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                        {lead.lead_temperature === 'hot' ? '🔥 Hot' : lead.lead_temperature === 'warm' ? '☀️ Warm' : '❄️ Cold'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">
-                        {lead.qualification_status?.replace(/_/g, ' ') || 'New'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[10px] text-gray-600 max-w-[150px] truncate" title={lead.ai_summary}>
-                      {lead.ai_summary || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-[10px] text-gray-600 max-w-[150px] truncate" title={lead.ai_next_action}>
-                      {lead.ai_next_action || '-'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[lead.status] || ""}`}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[10px] text-gray-400">
-                      {new Date(lead.created_at).toLocaleDateString("en-IN")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={lead.status}
-                        onChange={e => updateStatus(lead.id, e.target.value)}
-                        className="text-[10px] font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none"
+                {filteredLeads.map((lead: Lead) => {
+                  const intent = (lead.buying_intent || "N/A").toLowerCase();
+                  const quality = (lead.lead_quality || lead.lead_temperature || "N/A").toLowerCase();
+                  const dealSize = (lead.estimated_deal_size || "N/A").toLowerCase();
+                  
+                  const score = Number(lead.lead_score) || 0;
+                  const isPending = !lead.lead_score && !lead.ai_summary;
+
+                  let parsedInsights: string[] = [];
+                  try {
+                    const rawInsights = lead.key_insights || lead.ai_reasoning || "";
+                    if (rawInsights) {
+                      if (rawInsights.startsWith("[")) {
+                        parsedInsights = JSON.parse(rawInsights);
+                      } else {
+                        parsedInsights = rawInsights.split("|").map((s: string) => s.trim()).filter(Boolean);
+                      }
+                    }
+                  } catch (e) {
+                    parsedInsights = [lead.key_insights || lead.ai_reasoning || ""];
+                  }
+
+                  return (
+                    <Fragment key={lead.id}>
+                      <tr 
+                        className={`hover:bg-gray-50/50 transition cursor-pointer ${expandedLead === lead.id ? 'bg-gray-50' : ''}`}
+                        onClick={() => setExpandedLead(expandedLead === lead.id ? null : lead.id)}
                       >
-                        <option value="new">New</option>
-                        <option value="qualified">Qualified</option>
-                        <option value="converted">Converted</option>
-                        <option value="disqualified">Disqualified</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-[#2D1B4E] text-xs flex items-center gap-2">
+                            {expandedLead === lead.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                            {lead.name}
+                          </p>
+                          <p className="text-[10px] text-gray-400 ml-5">{lead.company_name || lead.email}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                            {TYPE_LABELS[lead.lead_type || ''] || lead.lead_type || lead.source?.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isPending ? (
+                            <span className="text-[10px] text-gray-400 italic">Pending</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-gray-700 w-6">{score}</span>
+                              <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full ${getScoreColor(score)}`} style={{ width: `${Math.min(score, 100)}%` }}></div>
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isPending ? (
+                            <span className="text-[10px] text-gray-400">-</span>
+                          ) : (
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${INTENT_COLORS[intent] || "bg-gray-100 text-gray-600"}`}>
+                              {intent.charAt(0).toUpperCase() + intent.slice(1)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isPending ? (
+                            <span className="text-[10px] text-gray-400">-</span>
+                          ) : (
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${QUALITY_COLORS[quality] || "bg-gray-100 text-gray-600"}`}>
+                              {quality === 'hot' ? '🔥 Hot' : quality === 'warm' ? '☀️ Warm' : quality === 'cold' ? '❄️ Cold' : quality}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isPending ? (
+                            <span className="text-[10px] text-gray-400">-</span>
+                          ) : (
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${DEAL_SIZE_COLORS[dealSize] || "bg-gray-100 text-gray-600"}`}>
+                              {dealSize.charAt(0).toUpperCase() + dealSize.slice(1)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[lead.status] || ""}`}>
+                            {lead.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[10px] text-gray-400">
+                          {new Date(lead.created_at).toLocaleDateString("en-IN")}
+                        </td>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={lead.status}
+                            onChange={e => updateStatus(lead.id, e.target.value)}
+                            className="text-[10px] font-bold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none"
+                          >
+                            <option value="new">New</option>
+                            <option value="qualified">Qualified</option>
+                            <option value="converted">Converted</option>
+                            <option value="disqualified">Disqualified</option>
+                          </select>
+                        </td>
+                      </tr>
+                      {expandedLead === lead.id && (
+                        <tr className="bg-gray-50/80 border-b border-gray-200">
+                          <td colSpan={9} className="p-0">
+                            <div className="p-6">
+                              <h3 className="text-sm font-black text-[#2D1B4E] mb-4 flex items-center gap-2">
+                                <Activity size={16} className="text-[#8E2A8B]" />
+                                AI Lead Analysis
+                              </h3>
+                              
+                              {isPending ? (
+                                <div className="text-center p-6 bg-white rounded-xl border border-gray-100">
+                                  <div className="animate-pulse flex flex-col items-center">
+                                    <Activity size={24} className="text-gray-300 mb-2" />
+                                    <p className="text-sm text-gray-500 font-medium">AI Analysis Pending</p>
+                                    <p className="text-xs text-gray-400 mt-1">Waiting for the AI service to process this lead...</p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                  <div className="lg:col-span-1 space-y-4">
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Lead Score</p>
+                                      <div className="flex items-end gap-3 mb-2">
+                                        <span className="text-3xl font-black text-[#2D1B4E]">{score}</span>
+                                        <span className="text-xs text-gray-500 mb-1">/ 100</span>
+                                      </div>
+                                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className={`h-full ${getScoreColor(score)}`} style={{ width: `${Math.min(score, 100)}%` }}></div>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-wrap gap-2">
+                                      <div className="w-full mb-1">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attributes</p>
+                                      </div>
+                                      <span className={`text-[10px] font-bold px-2.5 py-1.5 rounded-full ${INTENT_COLORS[intent] || "bg-gray-100 text-gray-600"}`}>
+                                        Intent: {intent.charAt(0).toUpperCase() + intent.slice(1)}
+                                      </span>
+                                      <span className={`text-[10px] font-bold px-2.5 py-1.5 rounded-full ${QUALITY_COLORS[quality] || "bg-gray-100 text-gray-600"}`}>
+                                        Quality: {quality === 'hot' ? '🔥 Hot' : quality === 'warm' ? '☀️ Warm' : quality === 'cold' ? '❄️ Cold' : quality}
+                                      </span>
+                                      <span className={`text-[10px] font-bold px-2.5 py-1.5 rounded-full ${DEAL_SIZE_COLORS[dealSize] || "bg-gray-100 text-gray-600"}`}>
+                                        Deal Size: {dealSize.charAt(0).toUpperCase() + dealSize.slice(1)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="lg:col-span-2 space-y-4">
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">AI Summary</p>
+                                      <p className="text-sm text-gray-700 leading-relaxed">{lead.ai_summary}</p>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm">
+                                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                          <Check size={12} /> Recommended Action
+                                        </p>
+                                        <p className="text-sm font-medium text-emerald-900">{lead.ai_next_action || lead.recommended_action || "Reach out to qualify"}</p>
+                                      </div>
+                                      
+                                      <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Key Insights</p>
+                                        {parsedInsights.length > 0 ? (
+                                          <ul className="space-y-1.5">
+                                            {parsedInsights.map((insight: string, idx: number) => (
+                                              <li key={idx} className="text-xs text-gray-600 flex items-start gap-2">
+                                                <span className="w-1 h-1 rounded-full bg-[#8E2A8B] mt-1.5 flex-shrink-0"></span>
+                                                <span>{insight}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <p className="text-xs text-gray-400 italic">No key insights extracted.</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Inject LeadCRMPanel here */}
+                                  <div className="lg:col-span-3">
+                                    <LeadCRMPanel lead={lead} onUpdate={() => loadLeads(lPage, lFilter)} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -376,7 +572,6 @@ const AdminDashboard = () => {
   >("dashboard");
 
   // Leads state
-  const [leadsData, setLeadsData] = useState<any[]>([]);
   const fetchLeads = async () => {
     try {
       console.log('🔍 [AdminDashboard] Fetching leads from API...');
@@ -386,7 +581,7 @@ const AdminDashboard = () => {
       console.log('🔍 [AdminDashboard] Token in sessionStorage:', storedToken ? `"${storedToken.substring(0, 30)}..."` : 'NOT FOUND');
       
       // Determine token to use
-      const adminToken = storedToken || "Admin!Kottravai2025%100";
+      const adminToken = storedToken || ";
       console.log('🔍 [AdminDashboard] Token being sent:', `"${adminToken.substring(0, 30)}..."`);
       console.log('🔍 [AdminDashboard] Token length:', adminToken.length);
       console.log('🔍 [AdminDashboard] Full token:', `"${adminToken}"`);
@@ -408,7 +603,6 @@ const AdminDashboard = () => {
       
       const leads = response.data || [];
       console.log('✅ [AdminDashboard] Setting leadsData to:', leads);
-      setLeadsData(leads);
     } catch (err: any) {
       console.error("❌ Failed to fetch leads:", err);
       console.error('❌ Error status:', err.response?.status);
@@ -498,7 +692,7 @@ const AdminDashboard = () => {
         {
           headers: {
             "x-admin-secret":
-              sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100",
+              sessionStorage.getItem("kottravai_admin_token") || ",
           },
         },
       );
@@ -521,7 +715,7 @@ const AdminDashboard = () => {
   const fetchAffiliateApplications = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/applications`,
         {
@@ -543,7 +737,7 @@ const AdminDashboard = () => {
     try {
       setIsAffiliateActionLoading(true);
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       
       const response = await axios.put(
         `${API_BASE}/api/affiliate/admin/applications/${id}`,
@@ -577,7 +771,7 @@ const AdminDashboard = () => {
   const fetchAffiliates = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/affiliates`,
         {
@@ -598,7 +792,7 @@ const AdminDashboard = () => {
   ) => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       await axios.put(
         `${API_BASE}/api/affiliate/admin/affiliates/${affiliateId}`,
         { level: newLevel },
@@ -618,7 +812,7 @@ const AdminDashboard = () => {
   const fetchAffiliatePayouts = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/payouts`,
         {
@@ -637,7 +831,7 @@ const AdminDashboard = () => {
   const handleRecordPayout = async (affiliateId: string, amount: number) => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       await axios.post(
         `${API_BASE}/api/affiliate/admin/payouts`,
         { affiliateId, amount, date: new Date().toISOString() },
@@ -654,7 +848,7 @@ const AdminDashboard = () => {
   const fetchAffiliateSales = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/sales`,
         {
@@ -972,7 +1166,7 @@ const AdminDashboard = () => {
     );
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+        sessionStorage.getItem("kottravai_admin_token") || ";
       const response = await axios.post(
         `${API_BASE}/api/admin/orders/${order.id}/shiprocket`,
         {},
@@ -1209,7 +1403,7 @@ const AdminDashboard = () => {
     formData.append("folder", folder);
 
     const adminSecret =
-      sessionStorage.getItem("kottravai_admin_token") || "Admin!Kottravai2025%100";
+      sessionStorage.getItem("kottravai_admin_token") || ";
 
     try {
       const response = await axios.post(

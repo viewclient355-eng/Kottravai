@@ -83,8 +83,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         try {
             // Priority: Session Storage (User's active login token) -> Env Var -> Default Fallback
             const adminPass = sessionStorage.getItem('kottravai_admin_token') || 
-                            import.meta.env.VITE_ADMIN_PASSWORD || 
-                            'Admin!Kottravai2025%100';
+                            import.meta.env.VITE_ADMIN_PASSWORD || '';
                             
             const response = await axios.get(API_ENDPOINTS.orders, {
                 headers: { 'X-Admin-Secret': adminPass }
@@ -146,8 +145,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     const updateOrderStatus = async (id: string, status: Order['status']) => {
         try {
             const adminPass = sessionStorage.getItem('kottravai_admin_token') || 
-                            import.meta.env.VITE_ADMIN_PASSWORD || 
-                            'Admin!Kottravai2025%100';
+                            import.meta.env.VITE_ADMIN_PASSWORD || '';
                             
             await axios.put(`${API_ENDPOINTS.orders}/${id}`, { status }, {
                 headers: { 'X-Admin-Secret': adminPass }
@@ -163,8 +161,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     const deleteOrder = async (id: string) => {
         try {
             const adminPass = sessionStorage.getItem('kottravai_admin_token') || 
-                            import.meta.env.VITE_ADMIN_PASSWORD || 
-                            'Admin!Kottravai2025%100';
+                            import.meta.env.VITE_ADMIN_PASSWORD || '';
                             
             await axios.delete(`${API_ENDPOINTS.orders}/${id}`, {
                 headers: { 'X-Admin-Secret': adminPass }

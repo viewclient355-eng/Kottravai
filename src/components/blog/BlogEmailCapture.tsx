@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { Mail, ArrowRight } from 'lucide-react';
 import analytics from '@/utils/analyticsService';
+import { API_ENDPOINTS } from '@/config/api';
 import { BlogPost } from '@/types/blog';
 
 interface Props {
@@ -29,8 +31,12 @@ const BlogEmailCapture: React.FC<Props> = ({ post }) => {
                 name: name.trim()
             });
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await axios.post(API_ENDPOINTS.leadCapture, {
+                name: name.trim(),
+                email: email.trim(),
+                source: 'newsletter',
+                inquiry: `Newsletter signup from blog post: ${post.title}`
+            });
             
             setStatus('success');
             setName('');

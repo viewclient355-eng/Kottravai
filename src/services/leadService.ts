@@ -3,7 +3,7 @@
  * Handles AI classification, Supabase persistence, email ACK, and analytics.
  */
 
-import { supabase } from '@/utils/supabaseClient';
+// import { supabase } from '@/utils/supabaseClient';
 import analytics from '@/utils/analyticsService';
 import { API_ENDPOINTS } from '@/config/api';
 
@@ -153,7 +153,7 @@ export const saveLead = async (data: LeadData): Promise<SavedLead | null> => {
             utm_campaign: utm.utm_campaign || null,
         };
 
-        const response = await fetch(API_ENDPOINTS.leads ? API_ENDPOINTS.leads + '/capture' : '/api/leads/capture', {
+        const response = await fetch('/api/leads/capture', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

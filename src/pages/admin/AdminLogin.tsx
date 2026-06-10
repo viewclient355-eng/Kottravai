@@ -13,7 +13,7 @@ const AdminLogin = () => {
 
         // This is a simple separation as requested. 
         // In a real production app, this would be a backend-verified JWT for an admin role.
-        const adminPass = import.meta.env.VITE_ADMIN_PASSWORD || 'Admin!Kottravai2025%100';
+        const adminPass = import.meta.env.VITE_ADMIN_PASSWORD || '';
 
         if (password === adminPass) {
             sessionStorage.setItem('kottravai_admin_session', 'true');

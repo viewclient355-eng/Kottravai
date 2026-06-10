@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { sendEmail } = require('../utils/mailer');
 const { getAffiliateWelcomeTemplate } = require('../utils/emailTemplates');
 const { sendAllianceApprovalWhatsApp, sendAllianceRejectionWhatsApp } = require('../utils/whatsapp');
+const { createLeadWithActivity } = require('../utils/leadHelpers');
 
 module.exports = (authenticateToken, authenticateAdmin) => {
     const router = express.Router();
@@ -36,6 +37,23 @@ module.exports = (authenticateToken, authenticateAdmin) => {
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
                 [name, email, phone, city, instagram_link, facebook_link, twitter_link, youtube_link, selling_experience, products_promoted, reason, finalUserId]
             );
+
+            await createLeadWithActivity(
+                {
+                    name,
+                    email,
+                    phone,
+                    company_name: null,
+                    source: 'alliance_application',
+                    inquiry: `City: ${city || 'N/A'}\nSocial Links: ${instagram_link || facebook_link || twitter_link || youtube_link || 'None'}\nExperience: ${selling_experience || 'N/A'}\nProducts Promoted: ${products_promoted || 'N/A'}\nReason: ${reason || 'N/A'}`
+                },
+                {
+                    activity_type: 'Note Added',
+                    activity_description: 'Alliance application submitted and lead created in CRM.',
+                    metadata: { city, instagram_link, facebook_link, twitter_link, youtube_link, selling_experience, products_promoted, reason }
+                }
+            );
+
             res.status(201).json({ success: true, application: result.rows[0] });
         } catch (err) {
             console.error('Affiliate apply error:', err);

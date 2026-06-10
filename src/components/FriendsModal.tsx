@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 import { X, User, Mail, Phone, Briefcase, Link as LinkIcon, Send, Heart, ShieldCheck, ChevronRight } from 'lucide-react';
+
+import { API_ENDPOINTS } from '@/config/api';
 
 interface FriendsModalProps {
     isOpen: boolean;
@@ -23,8 +26,15 @@ const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose }) => {
         setStatus('submitting');
         
         try {
-            // Mock API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await axios.post(API_ENDPOINTS.leadCapture, {
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                phone: formData.phone.trim() || undefined,
+                company_name: formData.profession.trim() || undefined,
+                source: 'friends_modal',
+                inquiry: `Friend program inquiry. Profession: ${formData.profession}. Social: ${formData.socialMedia}`
+            });
+
             setStatus('success');
             setTimeout(() => {
                 onClose();
@@ -32,6 +42,7 @@ const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose }) => {
                 setFormData({ name: '', email: '', phone: '', profession: '', socialMedia: '' });
             }, 2000);
         } catch (error) {
+            console.error('Friends modal lead capture failed:', error);
             setStatus('error');
         }
     };

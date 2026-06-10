@@ -23,6 +23,7 @@ export const API_ENDPOINTS = {
     affiliate: normalizeUrl(`${API_BASE}/api/affiliate`),
     location: normalizeUrl(`${API_BASE}/api/location`),
     contact: normalizeUrl(`${API_BASE}/api/contact`),
+    leadCapture: normalizeUrl(`${API_BASE}/api/leads/capture`),
     reviews: normalizeUrl(`${API_BASE}/api/reviews`),
     razorpay: normalizeUrl(`${API_BASE}/api/razorpay`),
     customRequest: normalizeUrl(`${API_BASE}/api/custom-request`),

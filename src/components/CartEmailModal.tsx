@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Gift, ArrowRight } from 'lucide-react';
+import axios from 'axios';
 import analytics from '@/utils/analyticsService';
+import { API_ENDPOINTS } from '@/config/api';
 
 interface CartEmailModalProps {
     isOpen: boolean;
@@ -43,10 +45,14 @@ const CartEmailModal: React.FC<CartEmailModalProps> = ({ isOpen, onClose }) => {
         setError('');
 
         try {
-            // Save locally
-            localStorage.setItem("cart_email", trimmedEmail);
-            
-            // Track successful capture
+            await axios.post(API_ENDPOINTS.leadCapture, {
+                email: trimmedEmail,
+                source: 'cart_capture',
+                inquiry: 'Customer opted to save cart email for later follow up.'
+            });
+
+            // Save locally after backend capture succeeds
+            localStorage.setItem('cart_email', trimmedEmail);
             analytics.trackEvent('cart_email_captured', {
                 email: trimmedEmail
             });

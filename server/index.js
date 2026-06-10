@@ -2545,6 +2545,77 @@ app.post('/api/b2b-inquiry', verifyCaptcha, async (req, res) => {
             }
         );
 
+        try {
+            console.log('[B2B_AI_START]', lead?.id);
+            console.log('[B2B_AI_PROVIDER]', 'groq');
+            const analysis = await aiLeadQualificationService.analyzeLead(lead);
+            console.log('[B2B_AI_RESULT]', JSON.stringify({
+                lead_id: lead?.id,
+                lead_score: analysis?.lead_score,
+                buying_intent: analysis?.buying_intent,
+                lead_quality: analysis?.lead_quality,
+                estimated_deal_size: analysis?.estimated_deal_size,
+                recommended_action: analysis?.recommended_action,
+                key_insights: analysis?.key_insights,
+                ai_summary: analysis?.ai_summary
+            }));
+
+            lead.lead_score = analysis?.lead_score;
+            lead.buying_intent = analysis?.buying_intent;
+            lead.lead_quality = analysis?.lead_quality;
+            lead.estimated_deal_size = analysis?.estimated_deal_size;
+            lead.key_insights = analysis?.key_insights;
+            lead.recommended_action = analysis?.recommended_action;
+            lead.ai_summary = analysis?.ai_summary;
+
+            await db.query(`
+                UPDATE leads
+                SET lead_score = $1,
+                    ai_summary = $2,
+                    buying_intent = $3,
+                    lead_quality = $4,
+                    estimated_deal_size = $5,
+                    recommended_action = $6,
+                    key_insights = $7::jsonb,
+                    ai_reasoning = $8,
+                    lead_temperature = $9,
+                    priority = $10,
+                    qualification_status = $11,
+                    ai_next_action = $12
+                WHERE id = $13
+            `, [
+                analysis?.lead_score,
+                analysis?.ai_summary,
+                analysis?.buying_intent,
+                analysis?.lead_quality,
+                analysis?.estimated_deal_size,
+                analysis?.recommended_action,
+                JSON.stringify(analysis?.key_insights || []),
+                analysis?.ai_reasoning,
+                analysis?.lead_temperature,
+                analysis?.priority,
+                analysis?.qualification_status,
+                analysis?.ai_next_action,
+                lead?.id
+            ]);
+            console.log('[B2B_AI_DB_UPDATE]', lead?.id);
+            
+            // Auto log AI qualification
+            const aiMode = analysis?.ai_qualification_mode === 'success' ? 'AI Qualification Completed' : 'AI Qualification Fallback';
+            const aiDesc = analysis?.ai_qualification_mode === 'success' 
+              ? `Lead scored ${analysis.lead_score}/100` 
+              : 'AI analysis failed, heuristic scoring applied';
+              
+            await supabase.from('lead_activities').insert([{
+                lead_id: lead.id,
+                activity_type: aiMode,
+                activity_description: aiDesc,
+                performed_by: 'System'
+            }]);
+        } catch (aiError) {
+            console.error('B2B AI qualification failed:', aiError.message);
+        }
+
         await Promise.all([
             sendEmail({
                 to: adminEmail,
@@ -2790,9 +2861,21 @@ app.post('/api/leads/capture', async (req, res) => {
                 qualification_status: analysis.qualification_status,
                 ai_next_action: analysis.ai_next_action
             }).eq('id', lead.id);
-            
             // Merge AI results back into lead for response
             Object.assign(lead, analysis);
+            
+            // Auto log AI qualification
+            const aiMode = analysis?.ai_qualification_mode === 'success' ? 'AI Qualification Completed' : 'AI Qualification Fallback';
+            const aiDesc = analysis?.ai_qualification_mode === 'success' 
+              ? `Lead scored ${analysis.lead_score}/100` 
+              : 'AI analysis failed, heuristic scoring applied';
+              
+            await supabase.from('lead_activities').insert([{
+                lead_id: lead.id,
+                activity_type: aiMode,
+                activity_description: aiDesc,
+                performed_by: 'System'
+            }]);
         } catch (aiErr) {
             console.error('AI Analysis during capture failed:', aiErr.message);
         }
@@ -2824,6 +2907,19 @@ app.post('/api/leads/:id/ai-analysis', async (req, res) => {
         }).eq('id', id);
 
         if (updateErr) throw new Error('Failed to update lead with AI data: ' + updateErr.message);
+
+        // Auto log AI qualification
+        const aiMode = analysis?.ai_qualification_mode === 'success' ? 'AI Qualification Completed' : 'AI Qualification Fallback';
+        const aiDesc = analysis?.ai_qualification_mode === 'success' 
+          ? `Lead scored ${analysis.lead_score}/100` 
+          : 'AI analysis failed, heuristic scoring applied';
+          
+        await supabase.from('lead_activities').insert([{
+            lead_id: lead.id,
+            activity_type: aiMode,
+            activity_description: aiDesc,
+            performed_by: 'System'
+        }]);
 
         res.status(200).json({ status: 'success', analysis });
     } catch (error) {
@@ -3789,13 +3885,18 @@ app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
 app.patch('/api/admin/leads/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, priority, notes, next_followup_at } = req.body;
+        const { status, priority, notes, next_followup_at, assigned_to, next_action } = req.body;
 
         const updates = {};
-        if (status)           updates.status = status;
-        if (priority)         updates.priority = priority;
-        if (notes !== undefined) updates.notes = notes;
-        if (next_followup_at) updates.next_followup_at = next_followup_at;
+        if (status !== undefined)     updates.status = status;
+        if (priority !== undefined)   updates.priority = priority;
+        if (notes !== undefined)      updates.notes = notes;
+        if (next_followup_at !== undefined) updates.next_followup_at = next_followup_at;
+        if (assigned_to !== undefined) updates.assigned_to = assigned_to;
+        if (next_action !== undefined) updates.next_action = next_action;
+
+        const { data: oldLead } = await supabase.from('leads').select('*').eq('id', id).single();
+        if (!oldLead) return res.status(404).json({ error: 'Lead not found' });
 
         const { data, error } = await supabase
             .from('leads')
@@ -3809,12 +3910,99 @@ app.patch('/api/admin/leads/:id', authenticateAdmin, async (req, res) => {
             return res.status(500).json({ error: 'Failed to update lead', details: error.message });
         }
 
+        // Auto-generate activity logs
+        const events = [];
+        const performer = req.user?.id || 'Admin';
+        
+        if (updates.status && updates.status !== oldLead.status) {
+            events.push({ lead_id: id, activity_type: 'Status Changed', activity_description: `Status changed from ${oldLead.status} to ${updates.status}`, performed_by: performer });
+        }
+        if (updates.assigned_to !== undefined && updates.assigned_to !== oldLead.assigned_to) {
+            events.push({ lead_id: id, activity_type: 'Assignment Changed', activity_description: `Assigned to updated to ${updates.assigned_to || 'unassigned'}`, performed_by: performer });
+        }
+        if (updates.next_followup_at && updates.next_followup_at !== oldLead.next_followup_at) {
+            events.push({ lead_id: id, activity_type: 'Follow-up Scheduled', activity_description: `Next follow-up set for ${updates.next_followup_at}`, performed_by: performer });
+        }
+
+        if (events.length > 0) {
+            await supabase.from('lead_activities').insert(events);
+        }
+
         // Log admin action
         console.log(`[Leads] Admin updated lead ${id}:`, updates);
         res.json({ success: true, lead: data });
     } catch (err) {
         console.error('[Leads] PATCH /api/admin/leads/:id error:', err.message);
         res.status(500).json({ error: 'Server error updating lead' });
+    }
+});
+
+/**
+ * GET /api/admin/sales-reps
+ * Dynamic API endpoint for sales representatives. Currently mocked to allow future DB integration.
+ */
+app.get('/api/admin/sales-reps', authenticateAdmin, async (req, res) => {
+    // This provides a clean upgrade path without modifying the DB schema yet
+    const salesReps = [
+        { id: "sarah", name: "Sarah (Sales)" },
+        { id: "mike", name: "Mike (Account Exec)" },
+        { id: "jessica", name: "Jessica (SDR)" }
+    ];
+    res.json({ success: true, salesReps });
+});
+
+/**
+ * GET /api/admin/leads/:id/activities
+ * Fetch timeline events from lead_activities.
+ */
+app.get('/api/admin/leads/:id/activities', authenticateAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('lead_activities')
+            .select('*')
+            .eq('lead_id', id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('[Leads] Error fetching activities:', error.message);
+            return res.status(500).json({ error: 'Failed to fetch activities', details: error.message });
+        }
+        res.json({ success: true, activities: data || [] });
+    } catch (err) {
+        console.error('[Leads] GET /activities error:', err.message);
+        res.status(500).json({ error: 'Server error fetching activities' });
+    }
+});
+
+/**
+ * POST /api/admin/leads/:id/activities
+ * Add a new activity note/event to lead_activities.
+ */
+app.post('/api/admin/leads/:id/activities', authenticateAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { activity_type, activity_description, performed_by } = req.body;
+
+        const { data, error } = await supabase
+            .from('lead_activities')
+            .insert([{
+                lead_id: id,
+                activity_type: activity_type || 'Note Added',
+                activity_description: activity_description,
+                performed_by: performed_by || req.user?.id || null
+            }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[Leads] Error adding activity:', error.message);
+            return res.status(500).json({ error: 'Failed to add activity', details: error.message });
+        }
+        res.json({ success: true, activity: data });
+    } catch (err) {
+        console.error('[Leads] POST /activities error:', err.message);
+        res.status(500).json({ error: 'Server error adding activity' });
     }
 });
 
