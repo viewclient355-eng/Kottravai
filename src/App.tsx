@@ -139,7 +139,7 @@ function App() {
                     <Route path="/faqs" element={<FAQ />} />
                     <Route path="/services" element={<PageViewer slugUri="services" />} />
                     <Route path="/contact" element={<Contact />} />
-                    <Route path="/campus" element={<Campus />} />
+                    <Route path="/camps" element={<Campus />} />
                     <Route path="/affiliate/dashboard" element={<AffiliateDashboard />} />
                     <Route path="/shipping-policy" element={<ShippingPolicy />} />
                     <Route path="/refund-policy" element={<RefundPolicy />} />
