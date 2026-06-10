@@ -2610,7 +2610,7 @@ app.post('/api/b2b-inquiry', verifyCaptcha, async (req, res) => {
                 lead_id: lead.id,
                 activity_type: aiMode,
                 activity_description: aiDesc,
-                performed_by: 'System'
+                performed_by: null
             }]);
         } catch (aiError) {
             console.error('B2B AI qualification failed:', aiError.message);
@@ -2874,7 +2874,7 @@ app.post('/api/leads/capture', async (req, res) => {
                 lead_id: lead.id,
                 activity_type: aiMode,
                 activity_description: aiDesc,
-                performed_by: 'System'
+                performed_by: null
             }]);
         } catch (aiErr) {
             console.error('AI Analysis during capture failed:', aiErr.message);
@@ -2918,7 +2918,7 @@ app.post('/api/leads/:id/ai-analysis', async (req, res) => {
             lead_id: lead.id,
             activity_type: aiMode,
             activity_description: aiDesc,
-            performed_by: 'System'
+            performed_by: null
         }]);
 
         res.status(200).json({ status: 'success', analysis });

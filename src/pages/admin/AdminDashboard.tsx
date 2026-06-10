@@ -581,7 +581,7 @@ const AdminDashboard = () => {
       console.log('🔍 [AdminDashboard] Token in sessionStorage:', storedToken ? `"${storedToken.substring(0, 30)}..."` : 'NOT FOUND');
       
       // Determine token to use
-      const adminToken = storedToken || ";
+      const adminToken = storedToken || "";
       console.log('🔍 [AdminDashboard] Token being sent:', `"${adminToken.substring(0, 30)}..."`);
       console.log('🔍 [AdminDashboard] Token length:', adminToken.length);
       console.log('🔍 [AdminDashboard] Full token:', `"${adminToken}"`);
@@ -692,7 +692,7 @@ const AdminDashboard = () => {
         {
           headers: {
             "x-admin-secret":
-              sessionStorage.getItem("kottravai_admin_token") || ",
+              sessionStorage.getItem("kottravai_admin_token") || "",
           },
         },
       );
@@ -715,7 +715,7 @@ const AdminDashboard = () => {
   const fetchAffiliateApplications = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/applications`,
         {
@@ -737,7 +737,7 @@ const AdminDashboard = () => {
     try {
       setIsAffiliateActionLoading(true);
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       
       const response = await axios.put(
         `${API_BASE}/api/affiliate/admin/applications/${id}`,
@@ -771,7 +771,7 @@ const AdminDashboard = () => {
   const fetchAffiliates = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/affiliates`,
         {
@@ -792,7 +792,7 @@ const AdminDashboard = () => {
   ) => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       await axios.put(
         `${API_BASE}/api/affiliate/admin/affiliates/${affiliateId}`,
         { level: newLevel },
@@ -812,7 +812,7 @@ const AdminDashboard = () => {
   const fetchAffiliatePayouts = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/payouts`,
         {
@@ -831,7 +831,7 @@ const AdminDashboard = () => {
   const handleRecordPayout = async (affiliateId: string, amount: number) => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       await axios.post(
         `${API_BASE}/api/affiliate/admin/payouts`,
         { affiliateId, amount, date: new Date().toISOString() },
@@ -848,7 +848,7 @@ const AdminDashboard = () => {
   const fetchAffiliateSales = async () => {
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       const response = await axios.get(
         `${API_BASE}/api/affiliate/admin/sales`,
         {
@@ -1166,7 +1166,7 @@ const AdminDashboard = () => {
     );
     try {
       const adminSecret =
-        sessionStorage.getItem("kottravai_admin_token") || ";
+        sessionStorage.getItem("kottravai_admin_token") || "";
       const response = await axios.post(
         `${API_BASE}/api/admin/orders/${order.id}/shiprocket`,
         {},
@@ -1403,7 +1403,7 @@ const AdminDashboard = () => {
     formData.append("folder", folder);
 
     const adminSecret =
-      sessionStorage.getItem("kottravai_admin_token") || ";
+      sessionStorage.getItem("kottravai_admin_token") || "";
 
     try {
       const response = await axios.post(
