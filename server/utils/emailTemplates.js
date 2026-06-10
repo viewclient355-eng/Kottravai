@@ -303,6 +303,99 @@ const getAffiliateWelcomeTemplate = (data) => {
     return getBaseLayout(content);
 };
 
+// ──────────────────────────────────────────────────────────────
+// மண் வாசம் Camp Registration Email Templates
+// ──────────────────────────────────────────────────────────────
+
+const getCampusUserTemplate = (data) => {
+    const content = `
+        <h2 style="color: #2D1B4E;">🌿 You're Registered for மண் வாசம்!</h2>
+        <p>Dear <strong>${data.name}</strong>,</p>
+        <p>Thank you for registering for the <strong>மண் வாசம்</strong> nature camp. Your payment of <strong>₹350</strong> has been received successfully.</p>
+
+        <div style="background: linear-gradient(135deg, #fdf4fc, #f0faf0); padding: 24px; border-radius: 12px; margin: 24px 0; border: 1px solid #e8d4f0;">
+            <h3 style="color: #8E2A8B; margin-top: 0; margin-bottom: 16px;">📋 Your Registration Details</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr><td style="padding: 8px 4px; color: #666; width: 40%;"><strong>Name</strong></td><td style="padding: 8px 4px; color: #333;">${data.name}</td></tr>
+                <tr style="background: #fff8fe;"><td style="padding: 8px 4px; color: #666;"><strong>Age</strong></td><td style="padding: 8px 4px; color: #333;">${data.age}</td></tr>
+                <tr><td style="padding: 8px 4px; color: #666;"><strong>WhatsApp</strong></td><td style="padding: 8px 4px; color: #333;">+91 ${data.whatsapp}</td></tr>
+                <tr style="background: #fff8fe;"><td style="padding: 8px 4px; color: #666;"><strong>Place</strong></td><td style="padding: 8px 4px; color: #333;">${data.place}</td></tr>
+                <tr><td style="padding: 8px 4px; color: #666;"><strong>Profession</strong></td><td style="padding: 8px 4px; color: #333;">${data.profession}</td></tr>
+                <tr style="background: #fff8fe;"><td style="padding: 8px 4px; color: #666;"><strong>Payment ID</strong></td><td style="padding: 8px 4px; color: #333; font-family: monospace;">${data.paymentId}</td></tr>
+            </table>
+        </div>
+
+        <div style="background-color: #f0faf4; border-left: 4px solid #22c55e; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+            <p style="margin: 0; font-weight: bold; color: #166534;">✅ Payment Confirmed — ₹350</p>
+            <p style="margin: 6px 0 0; color: #166534; font-size: 13px;">Keep this email as your registration proof.</p>
+        </div>
+
+        <p style="color: #555;">We will be in touch shortly with camp details, location, schedule, and what to bring. Watch your WhatsApp (<strong>+91 ${data.whatsapp}</strong>) for updates!</p>
+
+        <p>If you have any questions, reply to this email or write to us at <a href="mailto:info@kottravai.in" style="color: #8E2A8B;">info@kottravai.in</a>.</p>
+
+        <p style="margin-top: 32px;">With warmth and anticipation,<br><strong>Team Kottravai — மண் வாசம்</strong></p>
+
+        <p style="text-align: center; margin-top: 24px;">
+            <a href="https://kottravai.in" class="btn">Visit Kottravai</a>
+        </p>
+    `;
+    return getBaseLayout(content);
+};
+
+const getCampusAdminTemplate = (data) => {
+    const content = `
+        <h2>🌿 New மண் வாசம் Registration</h2>
+        <p>A new participant has registered and completed payment for the மண் வாசம் camp.</p>
+
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px; color: #2D1B4E;">👤 Personal Details</h3>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 4px; color: #666; width: 40%;"><strong>Name</strong></td><td style="padding: 6px 4px;">${data.name}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Age</strong></td><td style="padding: 6px 4px;">${data.age}</td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>Gender</strong></td><td style="padding: 6px 4px;">${data.gender || 'Not specified'}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Email</strong></td><td style="padding: 6px 4px;"><a href="mailto:${data.email}" style="color: #8E2A8B;">${data.email}</a></td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>WhatsApp</strong></td><td style="padding: 6px 4px;"><a href="tel:+91${data.whatsapp}" style="color: #8E2A8B;">+91 ${data.whatsapp}</a></td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Place / City</strong></td><td style="padding: 6px 4px;">${data.place}</td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>Profession</strong></td><td style="padding: 6px 4px;">${data.profession}</td></tr>
+            </table>
+
+            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px; color: #2D1B4E; margin-top: 20px;">🚨 Emergency Contact</h3>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 4px; color: #666; width: 40%;"><strong>Name</strong></td><td style="padding: 6px 4px;">${data.emergencyName}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Phone</strong></td><td style="padding: 6px 4px;"><a href="tel:+91${data.emergencyPhone}" style="color: #8E2A8B;">+91 ${data.emergencyPhone}</a></td></tr>
+            </table>
+
+            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px; color: #2D1B4E; margin-top: 20px;">🏥 Health Information</h3>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 4px; color: #666; width: 40%;"><strong>Allergies</strong></td><td style="padding: 6px 4px;">${data.allergies || 'None'}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Medical Conditions</strong></td><td style="padding: 6px 4px;">${data.medicalConditions || 'None'}</td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>Physical Activities OK?</strong></td><td style="padding: 6px 4px;">${data.physicalActivities}</td></tr>
+            </table>
+
+            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px; color: #2D1B4E; margin-top: 20px;">📣 Discovery & Intent</h3>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 4px; color: #666; width: 40%;"><strong>Heard About Us</strong></td><td style="padding: 6px 4px;">${data.heardAbout}${data.heardAboutOther ? ` — ${data.heardAboutOther}` : ''}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Why Joining</strong></td><td style="padding: 6px 4px;">${data.whyJoin}${data.whyJoinOther ? ` — ${data.whyJoinOther}` : ''}</td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>Future Camp Updates?</strong></td><td style="padding: 6px 4px;">${data.futureCamps || 'Not specified'}</td></tr>
+            </table>
+
+            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px; color: #2D1B4E; margin-top: 20px;">💳 Payment</h3>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 4px; color: #666; width: 40%;"><strong>Amount</strong></td><td style="padding: 6px 4px; font-weight: bold; color: #16a34a;">₹350 ✅</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Payment ID</strong></td><td style="padding: 6px 4px; font-family: monospace;">${data.paymentId}</td></tr>
+                <tr><td style="padding: 6px 4px; color: #666;"><strong>Order ID</strong></td><td style="padding: 6px 4px; font-family: monospace;">${data.orderId}</td></tr>
+                <tr style="background:#f0f0f0;"><td style="padding: 6px 4px; color: #666;"><strong>Registered At</strong></td><td style="padding: 6px 4px;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</td></tr>
+            </table>
+        </div>
+
+        <p style="text-align: center;">
+            <a href="mailto:${data.email}" class="btn">Email Participant</a>
+        </p>
+    `;
+    return getBaseLayout(content);
+};
+
 module.exports = {
     getB2BAdminTemplate,
     getB2BUserTemplate,
@@ -310,5 +403,7 @@ module.exports = {
     getContactUserTemplate,
     getOrderAdminTemplate,
     getOrderUserTemplate,
-    getAffiliateWelcomeTemplate
+    getAffiliateWelcomeTemplate,
+    getCampusUserTemplate,
+    getCampusAdminTemplate,
 };

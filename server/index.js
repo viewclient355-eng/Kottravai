@@ -36,13 +36,18 @@ const { sendEmail } = require('./utils/mailer');
 const { sendWhatsAppOTP } = require('./utils/whatsapp');
 const { createLeadWithActivity, analyzeLeadAIById } = require('./utils/leadHelpers');
 const aiLeadQualificationService = require('./services/aiLeadQualificationService');
+const aiCopilotService = require('./services/aiCopilotService');
+const leadService = require('./services/leadService');
+const escalationService = require('./services/escalationService');
 const {
     getB2BAdminTemplate,
     getB2BUserTemplate,
     getContactAdminTemplate,
     getContactUserTemplate,
     getOrderAdminTemplate,
-    getOrderUserTemplate
+    getOrderUserTemplate,
+    getCampusUserTemplate,
+    getCampusAdminTemplate,
 } = require('./utils/emailTemplates');
 
 
@@ -161,7 +166,7 @@ app.use(cors({
         }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
         'Content-Type', 'Authorization', 'X-Requested-With', 'Accept',
         'x-rtb-fingerprint-id', 'X-RTB-Fingerprint-Id', 'razorpay_payment_id',
@@ -2844,43 +2849,8 @@ app.post('/api/leads/capture', async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'Email and source are required.' });
         }
 
-        // Insert lead using service role
-        const { data: lead, error: insertErr } = await supabase.from('leads').insert([payload]).select().single();
-        if (insertErr) throw new Error('Insert failed: ' + insertErr.message);
-
-        // Run AI Analysis immediately
-        let analysis = null;
-        try {
-            analysis = await aiLeadQualificationService.analyzeLead(lead);
-            await supabase.from('leads').update({
-                ai_summary: analysis.ai_summary,
-                ai_reasoning: analysis.ai_reasoning,
-                lead_score: analysis.lead_score,
-                lead_temperature: analysis.lead_temperature,
-                priority: analysis.priority,
-                qualification_status: analysis.qualification_status,
-                ai_next_action: analysis.ai_next_action
-            }).eq('id', lead.id);
-            // Merge AI results back into lead for response
-            Object.assign(lead, analysis);
-            
-            // Auto log AI qualification
-            const aiMode = analysis?.ai_qualification_mode === 'success' ? 'AI Qualification Completed' : 'AI Qualification Fallback';
-            const aiDesc = analysis?.ai_qualification_mode === 'success' 
-              ? `Lead scored ${analysis.lead_score}/100` 
-              : 'AI analysis failed, heuristic scoring applied';
-              
-            await supabase.from('lead_activities').insert([{
-                lead_id: lead.id,
-                activity_type: aiMode,
-                activity_description: aiDesc,
-                performed_by: null
-            }]);
-        } catch (aiErr) {
-            console.error('AI Analysis during capture failed:', aiErr.message);
-        }
-
-        res.status(201).json({ status: 'success', lead });
+        const result = await leadService.createLead(payload, req.user);
+        res.status(201).json({ status: 'success', lead: result.data });
     } catch (error) {
         console.error('Lead Capture Error:', error);
         res.status(500).json({ status: 'error', message: 'Failed to capture lead.' });
@@ -2891,37 +2861,6 @@ app.post('/api/leads/capture', async (req, res) => {
 app.post('/api/leads/:id/ai-analysis', async (req, res) => {
     try {
         const { id } = req.params;
-        const { data: lead, error: fetchErr } = await supabase.from('leads').select('*').eq('id', id).single();
-        if (fetchErr || !lead) throw new Error('Lead not found');
-
-        const analysis = await aiLeadQualificationService.analyzeLead(lead);
-
-        const { error: updateErr } = await supabase.from('leads').update({
-            ai_summary: analysis.ai_summary,
-            ai_reasoning: analysis.ai_reasoning,
-            lead_score: analysis.lead_score,
-            lead_temperature: analysis.lead_temperature,
-            priority: analysis.priority,
-            qualification_status: analysis.qualification_status,
-            ai_next_action: analysis.ai_next_action
-        }).eq('id', id);
-
-        if (updateErr) throw new Error('Failed to update lead with AI data: ' + updateErr.message);
-
-        // Auto log AI qualification
-        const aiMode = analysis?.ai_qualification_mode === 'success' ? 'AI Qualification Completed' : 'AI Qualification Fallback';
-        const aiDesc = analysis?.ai_qualification_mode === 'success' 
-          ? `Lead scored ${analysis.lead_score}/100` 
-          : 'AI analysis failed, heuristic scoring applied';
-          
-        await supabase.from('lead_activities').insert([{
-            lead_id: lead.id,
-            activity_type: aiMode,
-            activity_description: aiDesc,
-            performed_by: null
-        }]);
-
-        res.status(200).json({ status: 'success', analysis });
     } catch (error) {
         console.error('Lead AI Reanalysis Error:', error);
         res.status(500).json({ status: 'error', message: error.message || 'Failed to analyze lead.' });
@@ -3822,8 +3761,131 @@ app.get('/api/recover-order/:payment_id', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // 📋 LEADS API — Phase 1: Lead Capture & Qualification System
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/automation/run-escalations
+ * Triggered by cron. Requires x-cron-secret.
+ */
+app.post('/api/admin/automation/run-escalations', async (req, res) => {
+    try {
+        const secret = req.headers['x-cron-secret'];
+        const validSecret = process.env.CRON_SECRET || process.env.VITE_ADMIN_PASSWORD;
+        if (!secret || secret !== validSecret) {
+            return res.status(401).json({ error: 'Unauthorized: Invalid CRON secret' });
+        }
+        const result = await escalationService.runDailySweep();
+        res.json(result);
+    } catch (err) {
+        console.error('Escalation sweep error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * GET /api/admin/sales-queue
+ * Fetches dashboard operational metrics.
+ */
+app.get('/api/admin/sales-queue', authenticateAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+              COUNT(*) FILTER (WHERE next_followup_at::date = CURRENT_DATE AND status NOT IN ('won', 'lost', 'archived', 'completed')) as tasks_due_today,
+              COUNT(*) FILTER (WHERE next_followup_at < NOW() AND status NOT IN ('won', 'lost', 'archived', 'completed')) as overdue_followups,
+              COUNT(*) FILTER (WHERE priority = 'critical' AND status NOT IN ('won', 'lost', 'archived', 'completed')) as critical_leads,
+              COUNT(*) FILTER (WHERE assigned_to IS NULL AND status NOT IN ('won', 'lost', 'archived', 'completed')) as unassigned_leads,
+              COUNT(*) FILTER (WHERE priority = 'high' AND status NOT IN ('won', 'lost', 'archived', 'completed')) as escalated_leads
+            FROM public.leads;
+        `;
+        const { rows } = await db.query(query);
+        res.json({ success: true, queue: rows[0] });
+    } catch (err) {
+        console.error('Error fetching sales queue metrics:', err);
+        res.status(500).json({ error: 'Failed to fetch sales queue' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🤖 Phase 3B: AI Sales Copilot
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/admin/copilot/dashboard', authenticateAdmin, async (req, res) => {
+    try {
+        const topLeadsQuery = `
+            SELECT id, name, company, conversion_probability, risk_status, next_action, copilot_rationale
+            FROM public.leads
+            WHERE status NOT IN ('won', 'lost', 'archived', 'completed')
+              AND conversion_probability > 0
+            ORDER BY conversion_probability DESC, lead_score DESC
+            LIMIT 10;
+        `;
+        const riskLeadsQuery = `
+            SELECT id, name, company, conversion_probability, risk_status, next_action, copilot_rationale
+            FROM public.leads
+            WHERE risk_status IN ('Stalled', 'Churn Risk', 'Missed Follow-up Risk', 'Needs Immediate Attention')
+              AND status NOT IN ('won', 'lost', 'archived', 'completed')
+            ORDER BY priority DESC, next_followup_at ASC
+            LIMIT 10;
+        `;
+        const actionQueueQuery = `
+            SELECT next_action, COUNT(*) as count
+            FROM public.leads
+            WHERE status NOT IN ('won', 'lost', 'archived', 'completed')
+              AND next_action IS NOT NULL
+            GROUP BY next_action
+            ORDER BY count DESC;
+        `;
+        const [topRes, riskRes, actionRes] = await Promise.all([
+            db.query(topLeadsQuery),
+            db.query(riskLeadsQuery),
+            db.query(actionQueueQuery)
+        ]);
+
+        res.json({
+            success: true,
+            topLeads: topRes.rows,
+            riskLeads: riskRes.rows,
+            actionQueue: actionRes.rows,
+            dailySummary: "Focus on closing Top Leads and re-engaging Leads At Risk to maximize pipeline momentum today."
+        });
+    } catch (err) {
+        console.error('[Copilot] GET /dashboard error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/admin/copilot/leads/:id/analyze', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await aiCopilotService.analyzeNextBestAction(req.params.id);
+        res.json(result);
+    } catch (err) {
+        console.error('[Copilot] analyze error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/copilot/leads/:id/draft', authenticateAdmin, async (req, res) => {
+    try {
+        const { channel } = req.body;
+        const result = await aiCopilotService.generateCommunicationDraft(req.params.id, channel);
+        res.json(result);
+    } catch (err) {
+        console.error('[Copilot] draft error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/copilot/analyze-all', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await aiCopilotService.analyzeAllLeads();
+        res.json(result);
+    } catch (err) {
+        console.error('[Copilot] analyze-all error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /**
  * GET /api/admin/leads
@@ -3832,7 +3894,7 @@ app.get('/api/recover-order/:payment_id', async (req, res) => {
  */
 app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
     try {
-        const { status, source, lead_type, priority, limit = 50, offset = 0 } = req.query;
+        const { status, source, lead_type, priority, queue_filter, limit = 50, offset = 0 } = req.query;
 
         let query = supabase
             .from('leads')
@@ -3844,6 +3906,24 @@ app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
         if (source)    query = query.eq('source', source);
         if (lead_type) query = query.eq('lead_type', lead_type);
         if (priority)  query = query.eq('priority', priority);
+
+        if (queue_filter) {
+            const activeStatuses = ['new', 'contacted', 'qualified', 'proposal_sent', 'negotiation'];
+            query = query.in('status', activeStatuses);
+            
+            if (queue_filter === 'tasks_due_today') {
+                const todayStr = new Date().toISOString().split('T')[0];
+                query = query.gte('next_followup_at', `${todayStr}T00:00:00.000Z`).lt('next_followup_at', `${todayStr}T23:59:59.999Z`);
+            } else if (queue_filter === 'overdue_followups') {
+                query = query.lt('next_followup_at', new Date().toISOString());
+            } else if (queue_filter === 'critical_leads') {
+                query = query.eq('priority', 'critical');
+            } else if (queue_filter === 'unassigned_leads') {
+                query = query.is('assigned_to', null);
+            } else if (queue_filter === 'escalated_leads') {
+                query = query.eq('priority', 'high');
+            }
+        }
 
         const { data, error, count } = await query;
 
@@ -3885,52 +3965,11 @@ app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
 app.patch('/api/admin/leads/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, priority, notes, next_followup_at, assigned_to, next_action } = req.body;
-
-        const updates = {};
-        if (status !== undefined)     updates.status = status;
-        if (priority !== undefined)   updates.priority = priority;
-        if (notes !== undefined)      updates.notes = notes;
-        if (next_followup_at !== undefined) updates.next_followup_at = next_followup_at;
-        if (assigned_to !== undefined) updates.assigned_to = assigned_to;
-        if (next_action !== undefined) updates.next_action = next_action;
-
-        const { data: oldLead } = await supabase.from('leads').select('*').eq('id', id).single();
-        if (!oldLead) return res.status(404).json({ error: 'Lead not found' });
-
-        const { data, error } = await supabase
-            .from('leads')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error('[Leads] Supabase update error:', error.message);
-            return res.status(500).json({ error: 'Failed to update lead', details: error.message });
-        }
-
-        // Auto-generate activity logs
-        const events = [];
-        const performer = req.user?.id || 'Admin';
+        const updates = req.body;
+        const result = await leadService.updateLead(id, updates, null, req.user?.id || null);
         
-        if (updates.status && updates.status !== oldLead.status) {
-            events.push({ lead_id: id, activity_type: 'Status Changed', activity_description: `Status changed from ${oldLead.status} to ${updates.status}`, performed_by: performer });
-        }
-        if (updates.assigned_to !== undefined && updates.assigned_to !== oldLead.assigned_to) {
-            events.push({ lead_id: id, activity_type: 'Assignment Changed', activity_description: `Assigned to updated to ${updates.assigned_to || 'unassigned'}`, performed_by: performer });
-        }
-        if (updates.next_followup_at && updates.next_followup_at !== oldLead.next_followup_at) {
-            events.push({ lead_id: id, activity_type: 'Follow-up Scheduled', activity_description: `Next follow-up set for ${updates.next_followup_at}`, performed_by: performer });
-        }
-
-        if (events.length > 0) {
-            await supabase.from('lead_activities').insert(events);
-        }
-
-        // Log admin action
         console.log(`[Leads] Admin updated lead ${id}:`, updates);
-        res.json({ success: true, lead: data });
+        res.json({ success: true, lead: result.data });
     } catch (err) {
         console.error('[Leads] PATCH /api/admin/leads/:id error:', err.message);
         res.status(500).json({ error: 'Server error updating lead' });
@@ -3944,9 +3983,9 @@ app.patch('/api/admin/leads/:id', authenticateAdmin, async (req, res) => {
 app.get('/api/admin/sales-reps', authenticateAdmin, async (req, res) => {
     // This provides a clean upgrade path without modifying the DB schema yet
     const salesReps = [
-        { id: "sarah", name: "Sarah (Sales)" },
-        { id: "mike", name: "Mike (Account Exec)" },
-        { id: "jessica", name: "Jessica (SDR)" }
+        { id: "11111111-1111-4111-8111-111111111111", name: "Sarah (Sales)" },
+        { id: "22222222-2222-4222-8222-222222222222", name: "Mike (Account Exec)" },
+        { id: "33333333-3333-4333-8333-333333333333", name: "Jessica (SDR)" }
     ];
     res.json({ success: true, salesReps });
 });
@@ -3983,23 +4022,12 @@ app.post('/api/admin/leads/:id/activities', authenticateAdmin, async (req, res) 
     try {
         const { id } = req.params;
         const { activity_type, activity_description, performed_by } = req.body;
-
-        const { data, error } = await supabase
-            .from('lead_activities')
-            .insert([{
-                lead_id: id,
-                activity_type: activity_type || 'Note Added',
-                activity_description: activity_description,
-                performed_by: performed_by || req.user?.id || null
-            }])
-            .select()
-            .single();
-
-        if (error) {
-            console.error('[Leads] Error adding activity:', error.message);
-            return res.status(500).json({ error: 'Failed to add activity', details: error.message });
-        }
-        res.json({ success: true, activity: data });
+        
+        const type = activity_type || 'Note Added';
+        const performer = performed_by || req.user?.id || null;
+        
+        const result = await leadService.logActivity(id, type, activity_description, performer);
+        res.json({ success: true, activity: result.data });
     } catch (err) {
         console.error('[Leads] POST /activities error:', err.message);
         res.status(500).json({ error: 'Server error adding activity' });
@@ -4379,6 +4407,189 @@ if (require.main === module) {
     // Run initial anomaly check
     runAnomalyCheck();
 }
+
+
+// ═══════════════════════════════════════════════════════════════════
+// மண் வாசம் CAMPUS REGISTRATION — API ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/campus/create-order
+ * Creates a Razorpay order for ₹350 camp registration fee.
+ */
+app.post('/api/campus/create-order', async (req, res) => {
+    try {
+        const CAMPUS_FEE = 350;
+        const options = {
+            amount: CAMPUS_FEE * 100, // Razorpay expects paise
+            currency: 'INR',
+            receipt: `campus_rcpt_${Date.now()}`,
+        };
+        const order = await razorpay.orders.create(options);
+        console.log(`✅ [CAMPUS] Razorpay order created: ${order.id}`);
+        res.json(order);
+    } catch (err) {
+        console.error('❌ [CAMPUS] Failed to create order:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * POST /api/campus/register
+ * Verifies Razorpay payment, sends emails, writes to Google Sheets.
+ */
+app.post('/api/campus/register', async (req, res) => {
+    const { formData, paymentId, orderId, signature } = req.body;
+
+    if (!formData || !paymentId || !orderId || !signature) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // 1. Verify Razorpay signature
+    try {
+        const body = orderId + '|' + paymentId;
+        const expectedSignature = crypto
+            .createHmac('sha256', (process.env.RAZORPAY_KEY_SECRET || '').trim())
+            .update(body)
+            .digest('hex');
+
+        if (expectedSignature !== signature) {
+            console.error('❌ [CAMPUS] Payment signature mismatch');
+            return res.status(400).json({ error: 'Payment verification failed. Please contact support.' });
+        }
+        console.log('✅ [CAMPUS] Payment signature verified:', paymentId);
+    } catch (sigErr) {
+        console.error('❌ [CAMPUS] Signature verification error:', sigErr.message);
+        return res.status(500).json({ error: 'Signature verification error' });
+    }
+
+    const enrichedData = { ...formData, paymentId, orderId };
+
+    // 2. Send confirmation email to participant (non-blocking)
+    sendEmail({
+        to: formData.email,
+        subject: '🌿 Your மண் வாசம் Registration is Confirmed!',
+        html: getCampusUserTemplate(enrichedData),
+        type: 'contact',
+    }).catch(err => console.error('❌ [CAMPUS] User email failed:', err.message));
+
+    // 3. Send admin notification (non-blocking)
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'admin@kottravai.in';
+    sendEmail({
+        to: adminEmail,
+        subject: `🌿 New மண் வாசம் Registration — ${formData.name}`,
+        html: getCampusAdminTemplate(enrichedData),
+        type: 'contact',
+    }).catch(err => console.error('❌ [CAMPUS] Admin email failed:', err.message));
+
+    // 4. Write to Google Sheets (non-blocking)
+    try {
+        const googleSheetsService = require('./services/googleSheetsService');
+        const { google } = require('googleapis');
+
+        let CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL || '';
+        let PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY || '';
+        const SHEET_ID = process.env.GOOGLE_SHEET_ID || '';
+
+        if (CLIENT_EMAIL && PRIVATE_KEY && SHEET_ID) {
+            CLIENT_EMAIL = CLIENT_EMAIL.trim().replace(/^["']|["']$/g, '');
+            PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
+
+            const auth = new google.auth.JWT(CLIENT_EMAIL, null, PRIVATE_KEY, [
+                'https://www.googleapis.com/auth/spreadsheets',
+            ]);
+            const sheetsApi = google.sheets({ version: 'v4', auth });
+            const CAMPUS_SHEET = 'மண் வாசம் Registrations';
+
+            // Ensure sheet exists
+            const spreadsheet = await sheetsApi.spreadsheets.get({ spreadsheetId: SHEET_ID });
+            const sheetExists = spreadsheet.data.sheets.some(
+                s => s.properties.title === CAMPUS_SHEET
+            );
+
+            if (!sheetExists) {
+                await sheetsApi.spreadsheets.batchUpdate({
+                    spreadsheetId: SHEET_ID,
+                    requestBody: {
+                        requests: [{
+                            addSheet: {
+                                properties: {
+                                    title: CAMPUS_SHEET,
+                                    gridProperties: { frozenRowCount: 1 },
+                                },
+                            },
+                        }],
+                    },
+                });
+
+                // Write header row
+                await sheetsApi.spreadsheets.values.update({
+                    spreadsheetId: SHEET_ID,
+                    range: `${CAMPUS_SHEET}!A1:T1`,
+                    valueInputOption: 'USER_ENTERED',
+                    requestBody: {
+                        values: [[
+                            'Timestamp', 'Name', 'Age', 'Gender', 'Email', 'WhatsApp',
+                            'Place / City', 'Profession',
+                            'Emergency Contact Name', 'Emergency Contact Phone',
+                            'Allergies', 'Medical Conditions', 'Physical Activities OK?',
+                            'Heard About Us', 'Heard About (Other)',
+                            'Why Joining', 'Why Joining (Other)',
+                            'Future Camp Updates?',
+                            'Payment ID', 'Razorpay Order ID',
+                        ]],
+                    },
+                });
+                console.log(`✅ [CAMPUS] Created sheet "${CAMPUS_SHEET}" with headers`);
+            }
+
+            // Append data row
+            await sheetsApi.spreadsheets.values.append({
+                spreadsheetId: SHEET_ID,
+                range: `${CAMPUS_SHEET}!A:T`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: {
+                    values: [[
+                        new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+                        formData.name || '',
+                        formData.age || '',
+                        formData.gender || '',
+                        formData.email || '',
+                        formData.whatsapp || '',
+                        formData.place || '',
+                        formData.profession || '',
+                        formData.emergencyName || '',
+                        formData.emergencyPhone || '',
+                        formData.allergies || '',
+                        formData.medicalConditions || '',
+                        formData.physicalActivities || '',
+                        formData.heardAbout || '',
+                        formData.heardAboutOther || '',
+                        formData.whyJoin || '',
+                        formData.whyJoinOther || '',
+                        formData.futureCamps || '',
+                        paymentId || '',
+                        orderId || '',
+                    ]],
+                },
+            });
+            console.log(`✅ [CAMPUS] Registration saved to Google Sheets for: ${formData.name}`);
+        } else {
+            console.warn('⚠️ [CAMPUS] Google Sheets credentials missing — skipping sheet write');
+        }
+    } catch (sheetErr) {
+        console.error('❌ [CAMPUS] Google Sheets write failed:', sheetErr.message);
+        // Non-fatal — registration still succeeds
+    }
+
+    console.log(`🌿 [CAMPUS] Registration complete for ${formData.name} (${formData.email}) — Payment: ${paymentId}`);
+    res.json({ success: true, message: 'Registration successful' });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// END CAMPUS REGISTRATION
+// ═══════════════════════════════════════════════════════════════════
 
 module.exports = app;
 

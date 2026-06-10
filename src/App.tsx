@@ -33,6 +33,7 @@ const Alliance = lazy(() => import('@/pages/Alliance'));
 const AffiliateDashboard = lazy(() => import('@/pages/AffiliateDashboard'));
 const ArtisanHub = lazy(() => import('@/pages/ArtisanHub'));
 const ArtisanProfile = lazy(() => import('@/pages/ArtisanProfile'));
+const Campus = lazy(() => import('@/pages/Campus'));
 
 
 
@@ -138,6 +139,7 @@ function App() {
                     <Route path="/faqs" element={<FAQ />} />
                     <Route path="/services" element={<PageViewer slugUri="services" />} />
                     <Route path="/contact" element={<Contact />} />
+                    <Route path="/campus" element={<Campus />} />
                     <Route path="/affiliate/dashboard" element={<AffiliateDashboard />} />
                     <Route path="/shipping-policy" element={<ShippingPolicy />} />
                     <Route path="/refund-policy" element={<RefundPolicy />} />
