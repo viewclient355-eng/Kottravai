@@ -121,7 +121,30 @@ Rules:
        console.error('[AICopilot] Draft generation failed:', err.message);
     }
 
-    return { success: true, draft: parsedResult || { error: 'Failed to generate draft' } };
+    if (!parsedResult) {
+      console.log(`[AICopilot] Applying fallback draft for channel: ${channel}`);
+      if (channel === 'email') {
+        parsedResult = {
+          subject: `Following up: Kottravai Partnership - ${lead.company}`,
+          body: `Hi ${lead.name},\n\nI hope this email finds you well.\n\nI wanted to quickly follow up on our previous conversation regarding your interest in Kottravai. I'd love to schedule a quick 10-minute call this week to discuss how we can align with ${lead.company}'s goals.\n\nPlease let me know what day works best for you.\n\nBest regards,\nTeam Kottravai`
+        };
+      } else if (channel === 'whatsapp') {
+        parsedResult = {
+          message: `Hi ${lead.name}, this is Team Kottravai. Just following up on your inquiry. Are you available for a quick chat today to discuss how we can help ${lead.company}? Let us know!`
+        };
+      } else if (channel === 'call') {
+        parsedResult = {
+          opening: `Hi ${lead.name}, this is [Your Name] from Kottravai. I'm calling to follow up on your recent inquiry. Is this a good time?`,
+          questions: [
+            `What is the primary timeline for your project?`,
+            `Are there any specific products you are prioritizing right now?`
+          ],
+          closing: `Great, I'll send over a summary email right now. Let's touch base again on [Date]. Have a great day!`
+        };
+      }
+    }
+
+    return { success: true, draft: parsedResult };
   }
 
   async analyzeAllLeads() {
