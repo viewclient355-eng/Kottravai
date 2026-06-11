@@ -6,46 +6,53 @@ const getBaseLayout = (content) => `
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kottravai</title>
     <style>
-        body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f6f6f6; }
-        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-        .header { padding: 30px 20px; text-align: center; background-color: #ffffff; border-bottom: 3px solid #8E2A8B; }
-        .logo { max-width: 150px; height: auto; }
-        .content { padding: 40px 30px; color: #333333; line-height: 1.6; }
-        .footer { padding: 30px; text-align: center; background-color: #f9f9f9; color: #888888; font-size: 12px; }
-        .btn { display: inline-block; padding: 12px 24px; background-color: #ffffff; color: #2D1B4E !important; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 20px; border: 2px solid #8E2A8B; }
-        .info-row { margin-bottom: 12px; }
-        .label { font-weight: bold; color: #555555; }
-        .value { color: #333333; }
-        h1, h2, h3 { color: #2D1B4E; margin-top: 0; }
-        .social-links { margin-top: 15px; }
-        .social-links a { margin: 0 5px; color: #8E2A8B; text-decoration: none; }
+        body { margin: 0; padding: 0; font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f4f5; -webkit-font-smoothing: antialiased; }
+        .container { width: 100%; max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04); border: 1px solid #f0f0f0; }
+        .header { padding: 32px 24px; text-align: center; background-color: #ffffff; border-bottom: 4px solid #8E2A8B; }
+        .logo { max-width: 140px; height: auto; display: block; margin: 0 auto; }
+        .content { padding: 40px 32px; color: #3f3f46; line-height: 1.7; font-size: 15px; }
+        .footer { padding: 32px; text-align: center; background-color: #fafafa; color: #71717a; font-size: 13px; border-top: 1px solid #f0f0f0; }
+        .btn { display: inline-block; padding: 14px 28px; background-color: #8E2A8B; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; margin-top: 24px; box-shadow: 0 2px 8px rgba(142, 42, 139, 0.2); }
+        .info-row { margin-bottom: 16px; display: flex; flex-direction: column; }
+        .label { font-weight: 600; color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .value { color: #27272a; font-size: 15px; }
+        h1, h2, h3 { color: #2D1B4E; margin-top: 0; font-weight: 700; line-height: 1.3; }
+        h2 { font-size: 22px; margin-bottom: 16px; }
+        .social-links { margin: 20px 0; }
+        .social-links a { margin: 0 10px; color: #8E2A8B; text-decoration: none; font-weight: 600; }
+        .data-card { background-color: #fdf4fc; padding: 24px; border-radius: 8px; margin: 24px 0; border: 1px solid #f8e5f6; }
+        .quote { padding: 16px 20px; border-left: 4px solid #8E2A8B; background-color: #fbfbfc; font-style: italic; color: #52525b; margin: 24px 0; }
     </style>
 </head>
 <body>
-    <div style="background-color: #f6f6f6; padding: 20px 0;">
-        <div class="container">
-            <div class="header">
-                <img src="data:image/png;base64,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6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJCA6Dqx0lOLBNKH6lnxJtIshpIUBJC6m7r7Y+0u66OubvX" alt="Kottravai Logo" class="logo" style="display:block; margin: 0 auto;">
-            </div>
-            
-            <div class="content">
-                ${content}
-            </div>
-            
-            <div class="footer">
-                <p>&copy; ${new Date().getFullYear()} Kottravai. All rights reserved.</p>
-                <p>Empowering Rural Women Artisans</p>
-                <div class="social-links">
-                    <a href="https://kottravai.in">Website</a> | 
-                    <a href="https://instagram.com/kottravai">Instagram</a>
-                </div>
-                <p style="margin-top: 10px;">
-                    Vazhai Incubator<br>
-                    S Veerachamy Chettiar college,<br>
-                    Puliyangudi - 627855
-                </p>
-            </div>
-        </div>
+    <div style="background-color: #f4f4f5; padding: 20px 0; min-height: 100vh;">
+        <table class="container" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+                <td class="header">
+                    <img src="https://www.kottravai.in/logo.png" alt="Kottravai Logo" class="logo">
+                </td>
+            </tr>
+            <tr>
+                <td class="content">
+                    ${content}
+                </td>
+            </tr>
+            <tr>
+                <td class="footer">
+                    <p style="margin: 0 0 8px 0; font-weight: 600; color: #52525b;">Empowering Rural Women Artisans</p>
+                    <p style="margin: 0 0 16px 0;">&copy; ${new Date().getFullYear()} Kottravai. All rights reserved.</p>
+                    <div class="social-links">
+                        <a href="https://kottravai.in">Website</a>
+                        <a href="https://instagram.com/kottravai">Instagram</a>
+                    </div>
+                    <p style="margin: 16px 0 0 0; font-size: 12px; line-height: 1.5;">
+                        Vazhai Incubator<br>
+                        S Veerachamy Chettiar College,<br>
+                        Puliyangudi - 627855
+                    </p>
+                </td>
+            </tr>
+        </table>
     </div>
 </body>
 </html>
@@ -56,38 +63,38 @@ const getB2BAdminTemplate = (data) => {
         <h2>New B2B Inquiry Received</h2>
         <p>You have received a new inquiry from the B2B contact form. Here are the details:</p>
         
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <div class="data-card">
             <div class="info-row">
-                <span class="label">Contact Name:</span> <br>
+                <span class="label">Contact Name:</span>
                 <span class="value">${data.name}</span>
             </div>
             <div class="info-row">
-                <span class="label">Email:</span> <br>
+                <span class="label">Email:</span>
                 <span class="value"><a href="mailto:${data.email}" style="color: #8E2A8B;">${data.email}</a></span>
             </div>
             <div class="info-row">
-                <span class="label">Phone:</span> <br>
+                <span class="label">Phone:</span>
                 <span class="value"><a href="tel:${data.phone}" style="color: #8E2A8B;">${data.phone}</a></span>
             </div>
             <div class="info-row">
-                <span class="label">Company / Business:</span> <br>
+                <span class="label">Company / Business:</span>
                 <span class="value">${data.company || 'N/A'}</span>
             </div>
             <div class="info-row">
-                <span class="label">Location:</span> <br>
+                <span class="label">Location:</span>
                 <span class="value">${data.location}</span>
             </div>
-            <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 15px 0;">
+            <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;">
             <div class="info-row">
-                <span class="label">Interested Products:</span> <br>
+                <span class="label">Interested Products:</span>
                 <span class="value">${data.products}</span>
             </div>
             <div class="info-row">
-                <span class="label">Approx. Quantity:</span> <br>
+                <span class="label">Approx. Quantity:</span>
                 <span class="value">${data.quantity}</span>
             </div>
             <div class="info-row">
-                <span class="label">Additional Notes:</span> <br>
+                <span class="label">Additional Notes:</span>
                 <p class="value" style="margin-top: 5px;">${data.notes || 'None'}</p>
             </div>
         </div>
@@ -107,10 +114,8 @@ const getB2BUserTemplate = (data) => {
         <p>We have successfully received your inquiry for <strong>${data.products}</strong>.</p>
         <p>Our team is currently reviewing your request and will get back to you within 24 hours to discuss how we can tailor our authentic, handmade products for your needs.</p>
         
-        <div style="background-color: #fdf4fc; padding: 15px; border-left: 4px solid #8E2A8B; margin: 25px 0;">
-            <p style="margin: 0; font-style: italic; color: #555;">
-                "Every gift you choose empowers rural women artisans and sustains traditional craftsmanship."
-            </p>
+        <div class="quote">
+            "Every gift you choose empowers rural women artisans and sustains traditional craftsmanship."
         </div>
 
         <p>If you have any urgent questions, please feel free to reply to this email or call us at <strong style="color: #2D1B4E;">+91 97870 30811</strong>.</p>
@@ -129,21 +134,21 @@ const getContactAdminTemplate = (data) => {
         <h2>New Contact Form Submission</h2>
         <p>You have received a new message from the website contact form.</p>
         
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <div class="data-card">
             <div class="info-row">
-                <span class="label">Name:</span> <br>
+                <span class="label">Name:</span>
                 <span class="value">${data.name}</span>
             </div>
             <div class="info-row">
-                <span class="label">Email:</span> <br>
+                <span class="label">Email:</span>
                 <span class="value"><a href="mailto:${data.email}" style="color: #8E2A8B;">${data.email}</a></span>
             </div>
             <div class="info-row">
-                <span class="label">Subject:</span> <br>
+                <span class="label">Subject:</span>
                 <span class="value">${data.subject || 'General Inquiry'}</span>
             </div>
             <div class="info-row">
-                <span class="label">Message:</span> <br>
+                <span class="label">Message:</span>
                 <p class="value" style="margin-top: 5px; white-space: pre-wrap;">${data.message}</p>
             </div>
         </div>
@@ -181,8 +186,8 @@ const getOrderAdminTemplate = (order) => {
         <h2>New Order Received!</h2>
         <p>You have received a new order (<strong>#${order.orderId}</strong>) from <strong>${order.customerName}</strong>.</p>
         
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 10px;">Customer Details</h3>
+        <div class="data-card">
+            <h3 style="border-bottom: 1px solid #e4e4e7; padding-bottom: 10px;">Customer Details</h3>
             <p>
                 <strong>Name:</strong> ${order.customerName}<br>
                 <strong>Email:</strong> ${order.customerEmail}<br>
@@ -229,8 +234,8 @@ const getOrderUserTemplate = (order) => {
         <p>Dear ${order.customerName},</p>
         <p>Thank you for shopping with <strong>Kottravai</strong>! Your order has been successfully placed.</p>
         
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 15px;">
+        <div class="data-card">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e4e4e7; padding-bottom: 10px; margin-bottom: 15px;">
                 <span><strong>Order ID:</strong> #${order.orderId}</span>
                 <span><strong>Date:</strong> ${new Date().toLocaleDateString()}</span>
             </div>
@@ -268,18 +273,18 @@ const getAffiliateWelcomeTemplate = (data) => {
         <p>Congratulations! Your application to become a Kottravai Affiliate Partner has been approved.</p>
         <p>You can now log in to your affiliate dashboard to start track your performance and earn commissions.</p>
         
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
-            <h3 style="color: #8E2A8B; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Your Partner Account Details</h3>
+        <div class="data-card">
+            <h3 style="color: #8E2A8B; margin-bottom: 15px; border-bottom: 1px solid #e4e4e7; padding-bottom: 5px;">Your Partner Account Details</h3>
             <div class="info-row">
-                <span class="label">Login Email:</span> <br>
+                <span class="label">Login Email:</span>
                 <span class="value">${data.email}</span>
             </div>
             <div class="info-row" style="margin-top: 10px;">
-                <span class="label">Password:</span> <br>
+                <span class="label">Password:</span>
                 <span class="value">${data.password}</span>
             </div>
             <div class="info-row" style="margin-top: 10px;">
-                <span class="label">Your Referral Code:</span> <br>
+                <span class="label">Your Referral Code:</span>
                 <span class="value" style="font-weight: 900; color: #2D1B4E; letter-spacing: 1px;">${data.referral_code}</span>
             </div>
         </div>

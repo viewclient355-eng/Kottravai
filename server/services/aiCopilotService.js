@@ -99,8 +99,11 @@ Rules:
     const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).single();
     if (!lead) throw new Error('Lead not found');
 
+    const company = lead.company || lead.organization || lead.institution || "your organization";
+    const leadName = lead.name || "there";
+
     const systemPrompt = 'You are an expert B2B sales copywriter. Return ONLY valid JSON for the drafted communication.';
-    let prompt = `Write a professional B2B ${channel} draft for a lead named ${lead.name} from ${lead.company}. The next intended action is: ${lead.next_action}. Lead context: ${lead.copilot_rationale || lead.ai_summary || 'Interested in our services.'}`;
+    let prompt = `Write a professional B2B ${channel} draft for a lead named ${leadName} from ${company}. The next intended action is: ${lead.next_action || 'Follow-up'}. Lead context: ${lead.copilot_rationale || lead.ai_summary || 'Interested in our services.'}`;
 
     if (channel === 'email') {
       prompt += `\nReturn strictly JSON:\n{"subject": "...", "body": "..."}`;
@@ -124,22 +127,23 @@ Rules:
     if (!parsedResult) {
       console.log(`[AICopilot] Applying fallback draft for channel: ${channel}`);
       if (channel === 'email') {
+        const subjectCompany = lead.company || lead.organization || lead.institution ? ` - ${company}` : '';
         parsedResult = {
-          subject: `Following up: Kottravai Partnership - ${lead.company}`,
-          body: `Hi ${lead.name},\n\nI hope this email finds you well.\n\nI wanted to quickly follow up on our previous conversation regarding your interest in Kottravai. I'd love to schedule a quick 10-minute call this week to discuss how we can align with ${lead.company}'s goals.\n\nPlease let me know what day works best for you.\n\nBest regards,\nTeam Kottravai`
+          subject: `Following up: Kottravai Partnership${subjectCompany}`,
+          body: `Hi ${leadName},\n\nI hope this email finds you well.\n\nI wanted to quickly follow up on our previous conversation regarding your interest in Kottravai. I'd love to schedule a quick 10-minute call this week to discuss how we can align with ${company}'s goals.\n\nPlease let me know what day works best for you.\n\nBest regards,\nTeam Kottravai`
         };
       } else if (channel === 'whatsapp') {
         parsedResult = {
-          message: `Hi ${lead.name}, this is Team Kottravai. Just following up on your inquiry. Are you available for a quick chat today to discuss how we can help ${lead.company}? Let us know!`
+          message: `Hi ${leadName}, this is Team Kottravai. Just following up on your inquiry. Are you available for a quick chat today to discuss how we can help ${company}? Let us know!`
         };
       } else if (channel === 'call') {
         parsedResult = {
-          opening: `Hi ${lead.name}, this is [Your Name] from Kottravai. I'm calling to follow up on your recent inquiry. Is this a good time?`,
+          opening: `Hi ${leadName}, this is from Kottravai. I'm calling to follow up on your recent inquiry. Is this a good time?`,
           questions: [
             `What is the primary timeline for your project?`,
             `Are there any specific products you are prioritizing right now?`
           ],
-          closing: `Great, I'll send over a summary email right now. Let's touch base again on [Date]. Have a great day!`
+          closing: `Great, I'll send over a summary email right now. Let's touch base again soon. Have a great day!`
         };
       }
     }
