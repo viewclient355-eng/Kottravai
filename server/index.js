@@ -3883,7 +3883,7 @@ app.post('/api/admin/copilot/leads/:id/send-email', authenticateAdmin, async (re
         const { subject, body } = req.body;
         const leadId = req.params.id;
 
-        const { data: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+        const { rows: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
         if (!lead || lead.length === 0) return res.status(404).json({ error: 'Lead not found' });
         
         const recipient = lead[0].email;
@@ -3926,7 +3926,7 @@ app.post('/api/admin/copilot/leads/:id/send-whatsapp', authenticateAdmin, async 
         const { message } = req.body;
         const leadId = req.params.id;
 
-        const { data: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+        const { rows: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
         if (!lead || lead.length === 0) return res.status(404).json({ error: 'Lead not found' });
 
         const phone = lead[0].phone;
