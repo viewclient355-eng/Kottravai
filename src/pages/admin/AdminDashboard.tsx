@@ -48,6 +48,7 @@ import {
   BadgeCheck,
   Wallet,
   Menu,
+  Sparkles,
 } from "lucide-react";
 import {
   XAxis,
@@ -64,6 +65,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { CopilotDashboardView } from "./CopilotDashboardView";
 import { categories } from "@/data/products";
 import toast from "react-hot-toast";
 import { compressImage } from "../../utils/imageCompressor";
@@ -74,36 +76,46 @@ import html2canvas from "html2canvas";
 // import { supabase } from '@/utils/supabaseClient';
 import { API_BASE } from "@/config/api";
 import LeadCRMPanel from "./LeadCRMPanel";
+import { LeadCopilotPanel } from "./LeadCopilotPanel";
 import { Lead } from "@/types/crm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LeadsView — Phase 1: Lead Capture & Qualification System
 // ─────────────────────────────────────────────────────────────────────────────
 const LeadsView = () => {
-  const [lFilter, setLFilter] = useState({ status: "all", source: "all", priority: "all", intent: "all", quality: "all", dealSize: "all" });
+  const [lFilter, setLFilter] = useState({ status: "all", source: "all", priority: "all", intent: "all", quality: "all", dealSize: "all", queue_filter: "all" });
   const [lLoading, setLLoading] = useState(false);
   const [lLeads, setLLeads] = useState<Lead[]>([]);
+  const [salesQueue, setSalesQueue] = useState<any>(null);
   const [lTotal, setLTotal] = useState(0);
   const [lPage, setLPage] = useState(0);
   const [expandedLead, setExpandedLead] = useState<string | null>(null);
   const PAGE_SIZE = 20;
 
-  const loadLeads = useCallback(async (page = 0, filter = { status: "all", source: "all", priority: "all" }) => {
+  const loadLeads = useCallback(async (page = 0, filter: any = { status: "all", source: "all", priority: "all", queue_filter: "all" }) => {
     setLLoading(true);
     try {
       const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "";
       const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) };
-      if (filter.status !== "all") params.status = filter.status;
-      if (filter.source !== "all") params.source = filter.source;
-      if (filter.priority !== "all") params.priority = filter.priority;
+      if (filter.status && filter.status !== "all") params.status = filter.status;
+      if (filter.source && filter.source !== "all") params.source = filter.source;
+      if (filter.priority && filter.priority !== "all") params.priority = filter.priority;
+      if (filter.queue_filter && filter.queue_filter !== "all") params.queue_filter = filter.queue_filter;
+      
       const qs = new URLSearchParams(params).toString();
       const res = await axios.get(`${API_BASE}/api/admin/leads?${qs}`, { headers: { "X-Admin-Secret": adminSecret } });
       if (res.data.success) {
         setLLeads(res.data.leads || []);
         setLTotal(res.data.total || 0);
       }
+      
+      // Also fetch queue metrics
+      const qRes = await axios.get(`${API_BASE}/api/admin/sales-queue`, { headers: { "X-Admin-Secret": adminSecret } });
+      if (qRes.data.success) {
+        setSalesQueue(qRes.data.queue);
+      }
     } catch {
-      toast.error("Failed to load leads");
+      toast.error("Failed to load leads or queue metrics");
     } finally {
       setLLoading(false);
     }
@@ -184,37 +196,11 @@ const LeadsView = () => {
     return true;
   });
 
-  const getDynamicPriority = (quality: string, intent: string) => {
-    const q = (quality || '').toLowerCase();
-    const i = (intent || '').toLowerCase();
-    if (q === 'hot' && i === 'high') return 'critical';
-    if (q === 'warm' && i === 'medium') return 'high';
-    if (q === 'cold' && i === 'low') return 'normal';
-    if (q === 'hot' || i === 'high') return 'high';
-    return 'normal';
+  const handleQueueClick = (queueFilter: string) => {
+    const newFilter = { ...lFilter, queue_filter: queueFilter };
+    setLFilter(newFilter);
+    loadLeads(0, newFilter);
   };
-
-  const followupsTodayCount = lLeads.filter(l => {
-    if (!l.next_followup_at) return false;
-    const date = new Date(l.next_followup_at);
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-  }).length;
-
-  const overdueFollowupsCount = lLeads.filter(l => {
-    if (!l.next_followup_at) return false;
-    const date = new Date(l.next_followup_at);
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    return date < today;
-  }).length;
-
-  const unassignedCount = lLeads.filter(l => !l.assigned_to).length;
-
-  const highPriorityCount = lLeads.filter(l => {
-    const p = getDynamicPriority(l.lead_quality || l.lead_temperature || "", l.buying_intent || "");
-    return p === 'critical' || p === 'high';
-  }).length;
 
 
   return (
@@ -235,20 +221,37 @@ const LeadsView = () => {
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stat Cards - Clickable Operational Queue */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: "Follow-ups Today", value: followupsTodayCount, color: "from-blue-500 to-blue-600" },
-          { label: "Overdue Follow-ups", value: overdueFollowupsCount, color: "from-red-500 to-red-600" },
-          { label: "Unassigned Leads", value: unassignedCount, color: "from-orange-400 to-orange-500" },
-          { label: "High Priority", value: highPriorityCount, color: "from-emerald-500 to-emerald-600" },
+          { label: "Tasks Due Today", value: salesQueue?.tasks_due_today || 0, filter: "tasks_due_today", color: "from-blue-500 to-blue-600" },
+          { label: "Overdue Follow-ups", value: salesQueue?.overdue_followups || 0, filter: "overdue_followups", color: "from-red-500 to-red-600" },
+          { label: "Critical Leads", value: salesQueue?.critical_leads || 0, filter: "critical_leads", color: "from-purple-500 to-purple-600" },
+          { label: "Unassigned Leads", value: salesQueue?.unassigned_leads || 0, filter: "unassigned_leads", color: "from-orange-400 to-orange-500" },
+          { label: "Escalated Leads", value: salesQueue?.escalated_leads || 0, filter: "escalated_leads", color: "from-emerald-500 to-emerald-600" },
         ].map((s, i) => (
-          <div key={i} className={`bg-gradient-to-br ${s.color} rounded-2xl p-5 shadow-lg`}>
+          <div 
+            key={i} 
+            onClick={() => handleQueueClick(s.filter)}
+            className={`bg-gradient-to-br ${s.color} rounded-2xl p-5 shadow-lg cursor-pointer transform hover:scale-105 transition-transform duration-200 border-2 ${lFilter.queue_filter === s.filter ? 'border-white ring-4 ring-[#8E2A8B]/50' : 'border-transparent'}`}
+          >
             <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">{s.label}</p>
             <p className="text-3xl font-black text-white">{s.value}</p>
           </div>
         ))}
       </div>
+      
+      {/* Clear Queue Filter Button */}
+      {lFilter.queue_filter !== "all" && (
+        <div className="flex justify-end">
+          <button 
+            onClick={() => handleQueueClick("all")}
+            className="text-sm font-bold text-[#8E2A8B] hover:underline"
+          >
+            Clear Active Queue Filter: {lFilter.queue_filter.replace(/_/g, ' ').toUpperCase()} &times;
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
@@ -481,8 +484,9 @@ const LeadsView = () => {
                                     </div>
                                   </div>
                                   
-                                  {/* Inject LeadCRMPanel here */}
+                                  {/* Inject LeadCRMPanel and LeadCopilotPanel here */}
                                   <div className="lg:col-span-3">
+                                    <LeadCopilotPanel lead={lead} onUpdate={() => loadLeads(lPage, lFilter)} />
                                     <LeadCRMPanel lead={lead} onUpdate={() => loadLeads(lPage, lFilter)} />
                                   </div>
                                 </div>
@@ -895,7 +899,7 @@ const AdminDashboard = () => {
     saved: string;
   } | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "analytics">(
+  const [activeTab, setActiveTab] = useState<"overview" | "analytics" | "sales-copilot">(
     "overview",
   );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -2529,6 +2533,12 @@ const AdminDashboard = () => {
                     >
                       Analytics
                     </button>
+                    <button
+                      onClick={() => setActiveTab("sales-copilot")}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "sales-copilot" ? "bg-[#8E2A8B] text-white shadow-md flex items-center gap-2" : "text-gray-500 hover:bg-gray-50 flex items-center gap-2"}`}
+                    >
+                      <Sparkles size={14} /> Copilot
+                    </button>
                   </div>
                   <button className="bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 text-gray-400 hover:text-[#8E2A8B] transition-colors">
                     <Calendar size={20} />
@@ -2536,7 +2546,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {activeTab === "overview" ? (
+              {activeTab === "overview" && (
                 <>
                   {/* Stats Grid - Innovative Look */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -2868,7 +2878,8 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 </>
-              ) : (
+              )}
+              {activeTab === "analytics" && (
                 <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 glass-card p-8 rounded-3xl">
@@ -3002,6 +3013,9 @@ const AdminDashboard = () => {
                     ))}
                   </div>
                 </div>
+              )}
+              {activeTab === "sales-copilot" && (
+                 <CopilotDashboardView />
               )}
             </div>
           ) : view === "videos" ? (

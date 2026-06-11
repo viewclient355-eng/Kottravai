@@ -71,8 +71,7 @@ export default function LeadCRMPanel({ lead, onUpdate }: LeadCRMPanelProps) {
     try {
       const res = await axios.post(`${API_BASE}/api/admin/leads/${lead.id}/activities`, {
         activity_type: "Note Added",
-        activity_description: newNote,
-        performed_by: "Admin"
+        activity_description: newNote
       }, { headers });
       if (res.data.success) {
         toast.success("Note added");
