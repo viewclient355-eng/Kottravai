@@ -8,7 +8,7 @@ import {
   Heart, AlertTriangle, Leaf, CheckCircle, ChevronDown, Loader2
 } from 'lucide-react';
 
-const CAMP_FEE = 350;
+const CAMP_FEE = 500;
 
 const initialForm = {
   name: '',
@@ -220,41 +220,16 @@ export default function CampusPage() {
         <meta name="description" content="Register for the மண் வாசம் nature camp — a grounded, immersive experience of nature, community, and mindful living." />
       </Helmet>
 
+      <div className="w-full">
+        <img 
+          src="/images/nature_camp_banner.png" 
+          alt="Nature Camp" 
+          className="w-full h-auto max-h-[60vh] object-cover" 
+        />
+      </div>
+
       <div className="bg-gradient-to-br from-[#f9f5ff] via-white to-[#f0faf0] min-h-screen">
-        <div className="max-w-6xl mx-auto px-4 py-8 md:py-10">
-          <div className="relative overflow-hidden rounded-[32px] border border-[#8E2A8B]/10 bg-gradient-to-br from-[#2D1B4E] via-[#5C1A5A] to-[#8E2A8B] p-8 md:p-12 shadow-xl">
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute left-8 top-8 h-32 w-32 rounded-full bg-white blur-3xl" />
-              <div className="absolute bottom-0 right-0 h-48 w-48 rounded-full bg-emerald-400 blur-3xl" />
-            </div>
-            <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-              <div className="max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
-                  <Leaf size={14} className="text-emerald-300" /> Nature Camp
-                </div>
-                <h1 className="mt-4 text-3xl font-black text-white sm:text-4xl md:text-5xl">
-                  மண் வாசம் Registration
-                </h1>
-                <p className="mt-4 text-sm leading-7 text-white/75 sm:text-base">
-                  Reconnect with the earth through a grounded outdoor experience of nature, community, and mindful living.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-white backdrop-blur-sm">
-                  <div className="text-2xl font-black text-emerald-300">₹350</div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-white/60">Registration Fee</div>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-white backdrop-blur-sm">
-                  <div className="text-2xl font-black text-emerald-300">Limited</div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-white/60">Seats Available</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-3xl mx-auto px-4 pb-12">
+        <div className="max-w-3xl mx-auto px-4 py-12">
           <form onSubmit={handlePayAndRegister} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 md:p-12">
 
             {/* Section 1: Essential */}
