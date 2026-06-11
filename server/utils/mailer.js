@@ -5,12 +5,12 @@ require('dotenv').config();
 // CRITICAL: All emails MUST authenticate via admin@kottravai.in
 // Aliases are used in reply-to field only
 const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT),
+    host: process.env.EMAIL_HOST || process.env.SMTP_HOST,
+    port: Number(process.env.EMAIL_PORT || process.env.SMTP_PORT),
     secure: true, // Use SSL/TLS
     auth: {
-        user: process.env.EMAIL_USER, // admin@kottravai.in
-        pass: process.env.EMAIL_PASS, // App password
+        user: process.env.EMAIL_USER || process.env.SMTP_USER, // admin@kottravai.in
+        pass: process.env.EMAIL_PASS || process.env.SMTP_PASSWORD, // App password
     },
     tls: {
         // Do not fail on invalid certs
@@ -40,7 +40,7 @@ const sendEmail = async ({ to, subject, html, type = 'contact', attachments = []
     const replyTo = EMAIL_ALIASES[type] || EMAIL_ALIASES.contact;
 
     console.log('📧 Sending email via Zoho SMTP...');
-    console.log('From:', process.env.EMAIL_USER);
+    console.log('From:', (process.env.EMAIL_USER || process.env.SMTP_USER));
     console.log('Reply-To:', replyTo);
     console.log('To:', to);
     console.log('Subject:', subject);
@@ -51,7 +51,7 @@ const sendEmail = async ({ to, subject, html, type = 'contact', attachments = []
 
     try {
         const info = await transporter.sendMail({
-            from: `"Kottravai" <${process.env.EMAIL_USER}>`,
+            from: `"Kottravai" <${process.env.EMAIL_USER || process.env.SMTP_USER}>`,
             to: to,
             replyTo: replyTo,
             subject: subject,

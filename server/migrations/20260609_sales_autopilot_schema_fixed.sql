@@ -34,12 +34,17 @@ CREATE TABLE IF NOT EXISTS public.leads (
     service_interest TEXT,
     inquiry TEXT,
     source TEXT,
+    utm_source TEXT,
+    utm_medium TEXT,
+    utm_campaign TEXT,
     lead_score INTEGER DEFAULT 0,
     ai_summary TEXT,
     status TEXT NOT NULL DEFAULT 'new',
+    priority TEXT DEFAULT 'medium',
     assigned_to UUID,
     next_action TEXT,
     last_contacted_at TIMESTAMPTZ,
+    next_followup_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -56,12 +61,21 @@ ALTER TABLE public.leads
     ADD COLUMN IF NOT EXISTS service_interest TEXT,
     ADD COLUMN IF NOT EXISTS inquiry TEXT,
     ADD COLUMN IF NOT EXISTS source TEXT,
+    ADD COLUMN IF NOT EXISTS utm_source TEXT,
+    ADD COLUMN IF NOT EXISTS utm_medium TEXT,
+    ADD COLUMN IF NOT EXISTS utm_campaign TEXT,
     ADD COLUMN IF NOT EXISTS lead_score INTEGER DEFAULT 0,
     ADD COLUMN IF NOT EXISTS ai_summary TEXT,
     ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
+    ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium',
     ADD COLUMN IF NOT EXISTS assigned_to UUID,
     ADD COLUMN IF NOT EXISTS next_action TEXT,
     ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS next_followup_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS conversion_probability INTEGER,
+    ADD COLUMN IF NOT EXISTS risk_status TEXT,
+    ADD COLUMN IF NOT EXISTS copilot_rationale TEXT,
+    ADD COLUMN IF NOT EXISTS copilot_last_analyzed_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
@@ -96,6 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_leads_created_at ON public.leads(created_at);
 CREATE INDEX IF NOT EXISTS idx_leads_updated_at ON public.leads(updated_at);
 CREATE INDEX IF NOT EXISTS idx_leads_last_contacted_at ON public.leads(last_contacted_at);
 CREATE INDEX IF NOT EXISTS idx_leads_next_action ON public.leads(next_action);
+CREATE INDEX IF NOT EXISTS idx_leads_next_followup_at ON public.leads(next_followup_at);
+CREATE INDEX IF NOT EXISTS idx_leads_priority ON public.leads(priority);
 
 DROP TRIGGER IF EXISTS trg_leads_updated_at ON public.leads;
 CREATE TRIGGER trg_leads_updated_at
@@ -142,7 +158,16 @@ BEGIN
             'Follow-up Sent',
             'Task Created',
             'Status Changed',
-            'Note Added'
+            'Note Added',
+            'Lead Captured',
+            'AI Qualification Completed',
+            'AI Qualification Fallback',
+            'Assignment Changed',
+            'Follow-up Scheduled',
+            'Follow-up Completed',
+            'Follow-up Missed',
+            'Lead Escalated',
+            'Lead Reassigned'
         ));
     END IF;
 END$$;
