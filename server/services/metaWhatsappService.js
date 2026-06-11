@@ -75,4 +75,60 @@ const sendMetaWhatsAppOrderConfirmation = async (phone, order) => {
     }
 };
 
-module.exports = { sendMetaWhatsAppOrderConfirmation };
+/**
+ * Sends a freeform WhatsApp text message using Meta Cloud API
+ * This requires the recipient to have messaged the business within the last 24 hours.
+ * @param {string} phone - Recipient phone number
+ * @param {string} messageText - The message to send
+ * @returns {Promise<{success: boolean, requireFallback?: boolean, error?: string}>}
+ */
+const sendMetaWhatsAppFreeFormText = async (phone, messageText) => {
+    const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+    const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+        console.error('❌ WhatsApp Credentials missing in environment variables');
+        return { success: false, error: 'Credentials missing' };
+    }
+
+    try {
+        let cleanPhone = phone.toString().replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+        const response = await axios({
+            method: 'POST',
+            url: `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            data: {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanPhone,
+                type: 'text',
+                text: { 
+                    preview_url: false,
+                    body: messageText
+                }
+            }
+        });
+
+        console.log(`✅ WhatsApp text sent to ${cleanPhone}:`, response.data.messages[0]?.id);
+        return { success: true, messageId: response.data.messages[0]?.id };
+
+    } catch (error) {
+        const errorData = error.response?.data?.error;
+        console.error('❌ WhatsApp API Freeform Error:', errorData || error.message);
+        
+        // Error code 131047: "Message failed to send because more than 24 hours have passed since the customer last replied to this number."
+        if (errorData && errorData.code === 131047) {
+            console.log('⚠️ 24-hour limit reached. Fallback required.');
+            return { success: false, requireFallback: true, error: 'Outside 24-hour window' };
+        }
+        
+        return { success: false, error: errorData?.message || error.message };
+    }
+};
+
+module.exports = { sendMetaWhatsAppOrderConfirmation, sendMetaWhatsAppFreeFormText };

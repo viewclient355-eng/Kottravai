@@ -39,6 +39,7 @@ const aiLeadQualificationService = require('./services/aiLeadQualificationServic
 const aiCopilotService = require('./services/aiCopilotService');
 const leadService = require('./services/leadService');
 const escalationService = require('./services/escalationService');
+const { sendMetaWhatsAppFreeFormText } = require('./services/metaWhatsappService');
 const {
     getB2BAdminTemplate,
     getB2BUserTemplate,
@@ -3873,6 +3874,122 @@ app.post('/api/admin/copilot/leads/:id/draft', authenticateAdmin, async (req, re
         res.json(result);
     } catch (err) {
         console.error('[Copilot] draft error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/copilot/leads/:id/send-email', authenticateAdmin, async (req, res) => {
+    try {
+        const { subject, body } = req.body;
+        const leadId = req.params.id;
+
+        const { data: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+        if (!lead || lead.length === 0) return res.status(404).json({ error: 'Lead not found' });
+        
+        const recipient = lead[0].email;
+        if (!recipient) return res.status(400).json({ error: 'Lead has no email address' });
+
+        try {
+            await sendEmail({
+                to: recipient,
+                subject: subject,
+                html: body.replace(/\n/g, '<br>'),
+                type: 'b2b' // or 'sales'
+            });
+
+            await leadService.logActivity(leadId, 'Email Sent', `Subject: ${subject}`, req.user?.name || 'Copilot AI', {
+                recipient,
+                subject,
+                status: 'success',
+                sent_at: new Date().toISOString()
+            });
+
+            res.json({ success: true, message: 'Email sent successfully' });
+        } catch (emailErr) {
+            await leadService.logActivity(leadId, 'Email Failed', `Subject: ${subject}`, req.user?.name || 'Copilot AI', {
+                recipient,
+                subject,
+                status: 'failed',
+                error: emailErr.message,
+                sent_at: new Date().toISOString()
+            });
+            res.status(500).json({ error: 'Failed to send email' });
+        }
+    } catch (err) {
+        console.error('[Copilot] send-email error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/copilot/leads/:id/send-whatsapp', authenticateAdmin, async (req, res) => {
+    try {
+        const { message } = req.body;
+        const leadId = req.params.id;
+
+        const { data: lead } = await db.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+        if (!lead || lead.length === 0) return res.status(404).json({ error: 'Lead not found' });
+
+        const phone = lead[0].phone;
+        if (!phone) return res.status(400).json({ error: 'Lead has no phone number' });
+
+        const result = await sendMetaWhatsAppFreeFormText(phone, message);
+
+        if (result.success) {
+            await leadService.logActivity(leadId, 'WhatsApp Sent', message, req.user?.name || 'Copilot AI', {
+                phone,
+                message_preview: message.substring(0, 50) + '...',
+                status: 'success',
+                sent_at: new Date().toISOString()
+            });
+            res.json({ success: true, message: 'WhatsApp sent successfully' });
+        } else if (result.requireFallback) {
+            // Log manual intent but failed API
+            await leadService.logActivity(leadId, 'WhatsApp Manual Send Opened', `Outside 24h window. Falling back to wa.me for: ${message.substring(0, 50)}...`, req.user?.name || 'Copilot AI', {
+                phone,
+                message_preview: message.substring(0, 50) + '...',
+                status: 'fallback',
+                sent_at: new Date().toISOString()
+            });
+            res.status(400).json({ error: result.error, requireFallback: true, phone });
+        } else {
+            await leadService.logActivity(leadId, 'WhatsApp Failed', `Error: ${result.error}`, req.user?.name || 'Copilot AI', {
+                phone,
+                message_preview: message.substring(0, 50) + '...',
+                status: 'failed',
+                error: result.error,
+                sent_at: new Date().toISOString()
+            });
+            res.status(500).json({ error: 'Failed to send WhatsApp message', details: result.error });
+        }
+    } catch (err) {
+        console.error('[Copilot] send-whatsapp error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/copilot/leads/:id/log-call', authenticateAdmin, async (req, res) => {
+    try {
+        const leadId = req.params.id;
+        const { status, outcome, notes, duration } = req.body;
+
+        if (status === 'initiated') {
+            await leadService.logActivity(leadId, 'Call Initiated', 'Dialing lead via system dialer.', req.user?.name || 'Sales Rep');
+            return res.json({ success: true });
+        } else if (status === 'completed') {
+            await leadService.logActivity(leadId, 'Call Completed', `Outcome: ${outcome}. Notes: ${notes || 'None'}`, req.user?.name || 'Sales Rep', {
+                outcome,
+                duration,
+                notes,
+                completed_at: new Date().toISOString()
+            });
+            
+            // If outcome requires priority update, could trigger it here.
+            return res.json({ success: true });
+        }
+
+        res.status(400).json({ error: 'Invalid call status' });
+    } catch (err) {
+        console.error('[Copilot] log-call error:', err);
         res.status(500).json({ error: err.message });
     }
 });

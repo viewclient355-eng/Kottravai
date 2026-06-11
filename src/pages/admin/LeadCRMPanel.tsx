@@ -14,6 +14,7 @@ export default function LeadCRMPanel({ lead, onUpdate }: LeadCRMPanelProps) {
   const [nextFollowup, setNextFollowup] = useState(lead.next_followup_at ? new Date(lead.next_followup_at).toISOString().split('T')[0] : "");
   const [status, setStatus] = useState(lead.status || "new");
   const [salesReps, setSalesReps] = useState<SalesRepresentative[]>([]);
+  const [activeTab, setActiveTab] = useState<'timeline' | 'communications'>('timeline');
 
   const adminSecret = sessionStorage.getItem("kottravai_admin_token") || "";
   const headers = { "X-Admin-Secret": adminSecret };
@@ -161,9 +162,20 @@ export default function LeadCRMPanel({ lead, onUpdate }: LeadCRMPanelProps) {
 
       {/* RIGHT COL: TIMELINE & NOTES */}
       <div className="space-y-4 flex flex-col h-full">
-        <h4 className="text-xs font-black text-[#2D1B4E] uppercase tracking-widest flex items-center gap-2 mb-4">
-          <Clock size={14} /> Activity Timeline
-        </h4>
+        <div className="flex items-center gap-4 border-b border-gray-200">
+          <button 
+            onClick={() => setActiveTab('timeline')}
+            className={`text-xs font-black uppercase tracking-widest pb-2 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'timeline' ? 'text-[#2D1B4E] border-[#8E2A8B]' : 'text-gray-400 border-transparent hover:text-gray-600'}`}
+          >
+            <Clock size={14} /> Activity Timeline
+          </button>
+          <button 
+            onClick={() => setActiveTab('communications')}
+            className={`text-xs font-black uppercase tracking-widest pb-2 flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'communications' ? 'text-[#2D1B4E] border-[#8E2A8B]' : 'text-gray-400 border-transparent hover:text-gray-600'}`}
+          >
+            <Send size={14} /> Communications
+          </button>
+        </div>
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex-1 flex flex-col">
           <div className="flex-1 overflow-y-auto max-h-[300px] pr-2 space-y-4 mb-4">
@@ -171,7 +183,7 @@ export default function LeadCRMPanel({ lead, onUpdate }: LeadCRMPanelProps) {
               <div className="flex justify-center p-4"><div className="animate-spin h-5 w-5 border-b-2 border-[#8E2A8B] rounded-full"></div></div>
             ) : activities.length === 0 ? (
               <p className="text-xs text-gray-400 italic text-center p-4">No activities found.</p>
-            ) : (
+            ) : activeTab === 'timeline' ? (
               activities.map((act) => (
                 <div key={act.id} className="flex gap-3 text-sm">
                   <div className="mt-1">
@@ -190,18 +202,60 @@ export default function LeadCRMPanel({ lead, onUpdate }: LeadCRMPanelProps) {
                   </div>
                 </div>
               ))
+            ) : (
+              // Communications Tab
+              activities
+                .filter(act => ['Email Sent', 'Email Failed', 'WhatsApp Sent', 'WhatsApp Failed', 'WhatsApp Manual Send Opened', 'Call Initiated', 'Call Completed'].includes(act.activity_type))
+                .map((act) => (
+                  <div key={act.id} className="flex gap-3 text-sm bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="mt-1">
+                      {act.activity_type.includes('Email') ? (
+                        <div className="bg-blue-100 p-1.5 rounded-full text-blue-600"><Send size={12}/></div>
+                      ) : act.activity_type.includes('WhatsApp') ? (
+                        <div className="bg-emerald-100 p-1.5 rounded-full text-emerald-600"><MessageSquare size={12}/></div>
+                      ) : (
+                        <div className="bg-purple-100 p-1.5 rounded-full text-purple-600"><Activity size={12}/></div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <p className="font-bold text-gray-800 text-xs">{act.activity_type}</p>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                          act.activity_type.includes('Failed') ? 'bg-red-100 text-red-600' :
+                          act.activity_type.includes('Manual') ? 'bg-orange-100 text-orange-600' :
+                          'bg-emerald-100 text-emerald-600'
+                        }`}>
+                          {act.metadata?.status || (act.activity_type.includes('Failed') ? 'Error' : 'Success')}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 text-xs mt-1 line-clamp-2">{act.activity_description}</p>
+                      
+                      {act.metadata && Object.keys(act.metadata).length > 0 && (
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] text-gray-500 bg-white p-2 rounded border border-gray-100">
+                          {act.metadata.recipient && <div><span className="font-bold">To:</span> {act.metadata.recipient}</div>}
+                          {act.metadata.phone && <div><span className="font-bold">To:</span> {act.metadata.phone}</div>}
+                          {act.metadata.outcome && <div><span className="font-bold">Outcome:</span> {act.metadata.outcome}</div>}
+                          {act.metadata.duration && <div><span className="font-bold">Duration:</span> {act.metadata.duration}</div>}
+                        </div>
+                      )}
+                      
+                      <p className="text-[9px] text-gray-400 mt-2">{new Date(act.created_at).toLocaleString('en-IN')} by {act.performed_by}</p>
+                    </div>
+                  </div>
+                ))
             )}
 
-            {/* Synthesized System Events (if they aren't in the DB natively) */}
-            <div className="flex gap-3 text-sm opacity-60">
-              <div className="mt-1">
-                <div className="bg-emerald-100 p-1.5 rounded-full text-emerald-600"><Check size={12}/></div>
+            {activeTab === 'timeline' && (
+              <div className="flex gap-3 text-sm opacity-60">
+                <div className="mt-1">
+                  <div className="bg-emerald-100 p-1.5 rounded-full text-emerald-600"><Check size={12}/></div>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800 text-xs">Lead Captured</p>
+                  <p className="text-[9px] text-gray-400 mt-1">{new Date(lead.created_at).toLocaleString('en-IN')}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-gray-800 text-xs">Lead Captured</p>
-                <p className="text-[9px] text-gray-400 mt-1">{new Date(lead.created_at).toLocaleString('en-IN')}</p>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-gray-100">

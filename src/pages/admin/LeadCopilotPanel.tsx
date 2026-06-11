@@ -7,6 +7,10 @@ export const LeadCopilotPanel: React.FC<{ lead: any, onUpdate: () => void }> = (
   const [analyzing, setAnalyzing] = useState(false);
   const [drafting, setDrafting] = useState<string | null>(null);
   const [draftResult, setDraftResult] = useState<any>(null);
+  const [executing, setExecuting] = useState<string | null>(null);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callNotes, setCallNotes] = useState('');
+  const [callOutcome, setCallOutcome] = useState('Interested');
 
   const handleAnalyze = async () => {
     try {
@@ -37,6 +41,92 @@ export const LeadCopilotPanel: React.FC<{ lead: any, onUpdate: () => void }> = (
       alert('Failed to generate draft.');
     } finally {
       setDrafting(null);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!draftResult || draftResult.channel !== 'email') return;
+    try {
+      setExecuting('email');
+      const token = sessionStorage.getItem("kottravai_admin_token") || "";
+      await axios.post(`${API_BASE}/api/admin/copilot/leads/${lead.id}/send-email`, {
+        subject: draftResult.data.subject,
+        body: draftResult.data.body
+      }, { headers: { "x-admin-secret": token } });
+      alert('Email sent successfully!');
+      setDraftResult(null);
+      onUpdate();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to send email');
+    } finally {
+      setExecuting(null);
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!draftResult || draftResult.channel !== 'whatsapp') return;
+    try {
+      setExecuting('whatsapp');
+      const token = sessionStorage.getItem("kottravai_admin_token") || "";
+      await axios.post(`${API_BASE}/api/admin/copilot/leads/${lead.id}/send-whatsapp`, {
+        message: draftResult.data.message
+      }, { headers: { "x-admin-secret": token } });
+      alert('WhatsApp sent successfully!');
+      setDraftResult(null);
+      onUpdate();
+    } catch (e: any) {
+      console.error(e);
+      if (e.response?.data?.requireFallback) {
+        const encodedMsg = encodeURIComponent(draftResult.data.message);
+        const phone = e.response.data.phone || lead.phone;
+        const confirmFallback = window.confirm('Direct WhatsApp API delivery unavailable (outside 24h window). Open WhatsApp to send manually?');
+        if (confirmFallback) {
+          window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
+        }
+      } else {
+        alert('Failed to send WhatsApp');
+      }
+    } finally {
+      setExecuting(null);
+    }
+  };
+
+  const handleInitiateCall = async () => {
+    try {
+      setExecuting('call');
+      const token = sessionStorage.getItem("kottravai_admin_token") || "";
+      await axios.post(`${API_BASE}/api/admin/copilot/leads/${lead.id}/log-call`, {
+        status: 'initiated'
+      }, { headers: { "x-admin-secret": token } });
+      window.open(`tel:${lead.phone}`, '_self');
+      setShowCallModal(true);
+      onUpdate();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to initiate call');
+    } finally {
+      setExecuting(null);
+    }
+  };
+
+  const handleCompleteCall = async () => {
+    try {
+      setExecuting('call-complete');
+      const token = sessionStorage.getItem("kottravai_admin_token") || "";
+      await axios.post(`${API_BASE}/api/admin/copilot/leads/${lead.id}/log-call`, {
+        status: 'completed',
+        outcome: callOutcome,
+        notes: callNotes
+      }, { headers: { "x-admin-secret": token } });
+      setShowCallModal(false);
+      setCallNotes('');
+      onUpdate();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to log call outcome');
+    } finally {
+      setExecuting(null);
     }
   };
 
@@ -122,15 +212,31 @@ export const LeadCopilotPanel: React.FC<{ lead: any, onUpdate: () => void }> = (
             </div>
             
             {draftResult.channel === 'email' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="text-sm border-b border-gray-100 pb-2"><span className="font-bold text-gray-500">Subject:</span> {draftResult.data?.subject}</div>
                 <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{draftResult.data?.body}</div>
+                <button 
+                  onClick={handleSendEmail} 
+                  disabled={executing === 'email'}
+                  className="w-full mt-4 py-2 bg-[#8E2A8B] text-white rounded-lg font-bold hover:bg-[#722170] transition-colors disabled:opacity-50"
+                >
+                  {executing === 'email' ? 'Sending...' : 'Send Email Now'}
+                </button>
               </div>
             )}
             
             {draftResult.channel === 'whatsapp' && (
-              <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                {draftResult.data?.message}
+              <div className="space-y-4">
+                <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {draftResult.data?.message}
+                </div>
+                <button 
+                  onClick={handleSendWhatsApp} 
+                  disabled={executing === 'whatsapp'}
+                  className="w-full mt-4 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                >
+                  {executing === 'whatsapp' ? 'Sending...' : 'Send WhatsApp Now'}
+                </button>
               </div>
             )}
             
@@ -150,8 +256,70 @@ export const LeadCopilotPanel: React.FC<{ lead: any, onUpdate: () => void }> = (
                   <h5 className="text-xs font-bold text-gray-500 mb-1">Closing</h5>
                   <p className="text-sm text-gray-700 italic">"{draftResult.data?.closing}"</p>
                 </div>
+                <button 
+                  onClick={handleInitiateCall} 
+                  disabled={executing === 'call'}
+                  className="w-full mt-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Phone size={16} /> {executing === 'call' ? 'Initiating...' : 'Call Lead Now'}
+                </button>
               </div>
             )}
+          </div>
+        )}
+
+        {showCallModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-in zoom-in-95">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Phone size={18} className="text-blue-500" /> Log Call Outcome
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Outcome</label>
+                  <select 
+                    value={callOutcome} 
+                    onChange={e => setCallOutcome(e.target.value)}
+                    className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-gray-50"
+                  >
+                    <option value="Interested">Interested</option>
+                    <option value="Follow-up Required">Follow-up Required</option>
+                    <option value="Proposal Requested">Proposal Requested</option>
+                    <option value="Not Interested">Not Interested</option>
+                    <option value="Wrong Contact">Wrong Contact</option>
+                    <option value="No Answer">No Answer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Notes</label>
+                  <textarea 
+                    value={callNotes}
+                    onChange={e => setCallNotes(e.target.value)}
+                    rows={4}
+                    placeholder="What was discussed?"
+                    className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-gray-50 resize-none"
+                  ></textarea>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setShowCallModal(false)}
+                    className="flex-1 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleCompleteCall}
+                    disabled={executing === 'call-complete'}
+                    className="flex-1 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    {executing === 'call-complete' ? 'Saving...' : 'Save Log'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
